@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "gifuct-js": "^2.1.2"
   },
   "devDependencies": {
     "@types/react": "^19.1.0",

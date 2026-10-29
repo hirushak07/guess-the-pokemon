@@ -29,6 +29,9 @@ export function PixelSprite({ id, reveal, clear = false }: Props) {
     MIN_RESOLUTION + Math.pow(amount, 1.6) * (DISPLAY_SIZE - MIN_RESOLUTION)
   );
   const scale = DISPLAY_SIZE / resolution;
+  // Strong blur initially, easing out as the timer advances.
+  // CSS filters preserve native GIF playback (unlike Canvas frame capture).
+  const blurPx = clear ? 0 : 15 * Math.pow(1 - amount, 1.5);
 
   return (
     <div
@@ -58,7 +61,7 @@ export function PixelSprite({ id, reveal, clear = false }: Props) {
           imageRendering: 'pixelated',
           transform: `scale(${scale})`,
           transformOrigin: 'center center',
-          filter: 'drop-shadow(0px 5px 1px #3c5d6040)',
+          filter: `blur(${blurPx.toFixed(2)}px) drop-shadow(0px 5px 1px #3c5d6040)`,
         }}
       />
     </div>

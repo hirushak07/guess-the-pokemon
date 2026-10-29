@@ -4,7 +4,10 @@ import { spriteUrl, fallbackSpriteUrl, staticSpriteUrl } from './pokemon';
 type Props = { id: number; reveal: number; clear?: boolean };
 
 const DISPLAY_SIZE = 220;
-const MIN_RESOLUTION = 20;
+// Lower values produce larger visible pixel blocks at the start.
+const MIN_RESOLUTION = 12;
+// Higher values keep the image pixelated for longer.
+const PIXEL_REVEAL_POWER = 2.2;
 
 /**
  * Keep the GIF in a real <img> element so the browser can play it natively.
@@ -26,12 +29,9 @@ export function PixelSprite({ id, reveal, clear = false }: Props) {
   const candidates = [spriteUrl(id), fallbackSpriteUrl(id), staticSpriteUrl(id)];
   const amount = clear ? 1 : Math.min(1, Math.max(0, reveal));
   const resolution = Math.round(
-    MIN_RESOLUTION + Math.pow(amount, 1.6) * (DISPLAY_SIZE - MIN_RESOLUTION)
+    MIN_RESOLUTION + Math.pow(amount, PIXEL_REVEAL_POWER) * (DISPLAY_SIZE - MIN_RESOLUTION)
   );
   const scale = DISPLAY_SIZE / resolution;
-  // Strong blur initially, easing out as the timer advances.
-  // CSS filters preserve native GIF playback (unlike Canvas frame capture).
-  const blurPx = clear ? 0 : 9 * Math.pow(1 - amount, 1.5);
 
   return (
     <div
@@ -44,8 +44,6 @@ export function PixelSprite({ id, reveal, clear = false }: Props) {
         justifyContent: 'center',
         flexShrink: 0,
         overflow: 'visible',
-        // Blur AFTER scaling to 220px; on the tiny <img> it gets magnified.
-        filter: `blur(${blurPx.toFixed(2)}px)`,
       }}
     >
       <img
@@ -63,7 +61,8 @@ export function PixelSprite({ id, reveal, clear = false }: Props) {
           imageRendering: 'pixelated',
           transform: `scale(${scale})`,
           transformOrigin: 'center center',
-          filter: 'drop-shadow(0px 5px 1px #3c5d6040)',
+          // No CSS blur: preserve the hard pixel edges.
+          filter: 'none',
         }}
       />
     </div>

@@ -51,7 +51,7 @@ function decodeFrames(buffer: ArrayBuffer): AnimationFrame[] {
     patch.height = patchHeight;
     const patchCtx = patch.getContext('2d');
     if (!patchCtx) throw new Error('Canvas not supported');
-    patchCtx.putImageData(new ImageData(frame.patch, patchWidth, patchHeight), 0, 0);
+    patchCtx.putImageData(new ImageData(new Uint8ClampedArray(frame.patch), patchWidth, patchHeight), 0, 0);
     // drawImage blends transparent pixels; putImageData directly would erase
     // unchanged parts of the previous frame.
     ctx.drawImage(patch, left, top);

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { PixelSprite } from './PixelSprite';
 import { POKEMON, pickRounds, pickOptions, normalizeGuess, type Pokemon } from './pokemon';
 
-const ROUND_SECONDS = 20;
+const ROUND_SECONDS = 10;
 type Mode = 'regular' | 'hard';
 type Stage = 'home' | 'playing' | 'reveal' | 'finished';
 type Outcome = { pokemon: Pokemon; correct: boolean; points: number; guess: string };

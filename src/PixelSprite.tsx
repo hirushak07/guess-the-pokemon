@@ -8,7 +8,7 @@ type AnimationFrame = { canvas: HTMLCanvasElement; duration: number };
 const DISPLAY_SIZE = 220;
 // Number of virtual pixels across the sprite at the START of a round.
 // At 12, a 220px sprite has roughly 18px-wide blocks.
-const MIN_RESOLUTION = 12;
+const MIN_RESOLUTION = 8;
 // Larger values keep pixels chunkier until later in the round.
 const PIXEL_REVEAL_POWER = 2.2;
 const MAX_RESOLUTION = 220;

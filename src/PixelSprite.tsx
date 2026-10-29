@@ -1,73 +1,66 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { spriteUrl, fallbackSpriteUrl, staticSpriteUrl } from './pokemon';
 
 type Props = { id: number; reveal: number; clear?: boolean };
 
-/** Offscreen low-resolution sampling makes an animated GIF progressively less pixelated. */
-export function PixelSprite({ id, reveal, clear = false }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [fallback, setFallback] = useState(false);
-  const revealRef = useRef(reveal);
-  const clearRef = useRef(clear);
-  revealRef.current = reveal;
-  clearRef.current = clear;
-  const src = spriteUrl(id);
-  useEffect(() => {
-    setFallback(false);
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    const candidates = [src, fallbackSpriteUrl(id), staticSpriteUrl(id)];
-    let candidate = 0;
-    img.onerror = () => {
-      if (stopped) return;
-      candidate++;
-      if (candidate < candidates.length) img.src = candidates[candidate];
-      else setFallback(true);
-    };
-    img.src = candidates[candidate];
-    const temp = document.createElement('canvas');
-    const tctx = temp.getContext('2d');
-    let frame = 0;
-    let stopped = false;
-    let loaded = false;
-    img.onload = () => { loaded = true; };
+const DISPLAY_SIZE = 220;
+const MIN_RESOLUTION = 20;
 
-    const render = () => {
-      if (stopped) return;
-      const canvas = canvasRef.current;
-      if (canvas && loaded) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          // Reveal 0..1 -> sample from 7px to 160px.
-          const amount = clearRef.current ? 1 : Math.min(1, Math.max(0, revealRef.current));
-          const resolution = Math.max(7, Math.round(7 + Math.pow(amount, 2.0) * 153));
-          temp.width = resolution;
-          temp.height = resolution;
-          if (tctx) {
-            try {
-              tctx.clearRect(0, 0, resolution, resolution);
-              tctx.imageSmoothingEnabled = true;
-              const size = Math.max(img.naturalWidth, img.naturalHeight, 1);
-              const scale = 0.91 * resolution / size;
-              const width = img.naturalWidth * scale;
-              const height = img.naturalHeight * scale;
-              tctx.drawImage(img, (resolution - width)/2, (resolution - height)/2, width, height);
-              ctx.clearRect(0, 0, canvas.width, canvas.height);
-              ctx.imageSmoothingEnabled = false;
-              ctx.drawImage(temp, 0, 0, canvas.width, canvas.height);
-            } catch {
-              setFallback(true);
-              stopped = true;
-              return;
-            }
-          }
-        }
-      }
-      frame = requestAnimationFrame(render);
-    };
-    frame = requestAnimationFrame(render);
-    return () => { stopped = true; cancelAnimationFrame(frame); img.onload = null; img.onerror = null; };
-  }, [src, id]);
-  if (fallback) return <img className="sprite-fallback" src={staticSpriteUrl(id)} alt="Mystery Pokémon" style={{filter: clear ? 'none' : `blur(${Math.round((1-reveal)*22)}px)`}}/>;
-  return <canvas ref={canvasRef} width={256} height={256} className="pokemon-canvas" aria-label="Mystery Pokémon sprite" role="img"/>;
+/**
+ * Keep the GIF in a real <img> element so the browser can play it natively.
+ *
+ * A GIF drawn to canvas is not a dependable animation source: the browser may
+ * expose only its first frame to drawImage(). Instead, render the <img> at a
+ * low CSS resolution, then enlarge it with nearest-neighbor scaling.
+ *
+ * Crucially, changing reveal does NOT recreate the image or change its src,
+ * so the animation clock keeps running throughout the round.
+ */
+export function PixelSprite({ id, reveal, clear = false }: Props) {
+  const [sourceIndex, setSourceIndex] = useState(0);
+
+  useEffect(() => {
+    setSourceIndex(0);
+  }, [id]);
+
+  const candidates = [spriteUrl(id), fallbackSpriteUrl(id), staticSpriteUrl(id)];
+  const amount = clear ? 1 : Math.min(1, Math.max(0, reveal));
+  const resolution = Math.round(
+    MIN_RESOLUTION + Math.pow(amount, 1.6) * (DISPLAY_SIZE - MIN_RESOLUTION)
+  );
+  const scale = DISPLAY_SIZE / resolution;
+
+  return (
+    <div
+      className="pokemon-sprite-stage"
+      style={{
+        width: DISPLAY_SIZE,
+        height: DISPLAY_SIZE,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        overflow: 'visible',
+      }}
+    >
+      <img
+        key={id}
+        src={candidates[sourceIndex]}
+        alt={clear ? 'Revealed Pokémon' : 'Mystery Pokémon'}
+        draggable={false}
+        onError={() => setSourceIndex(i => Math.min(i + 1, candidates.length - 1))}
+        style={{
+          width: resolution,
+          height: resolution,
+          flexShrink: 0,
+          maxWidth: 'none',
+          objectFit: 'contain',
+          imageRendering: 'pixelated',
+          transform: `scale(${scale})`,
+          transformOrigin: 'center center',
+          filter: 'drop-shadow(0px 5px 1px #3c5d6040)',
+        }}
+      />
+    </div>
+  );
 }

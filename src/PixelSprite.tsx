@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { decompressFrames, parseGIF } from 'gifuct-js';
 import { spriteUrl, fallbackSpriteUrl, staticSpriteUrl } from './pokemon';
 
-type Props = { id: number; reveal: number; clear?: boolean };
+type Props = { id: number; reveal: number; clear?: boolean; onReady?: () => void };
 type AnimationFrame = { canvas: HTMLCanvasElement; duration: number };
 
 const DISPLAY_SIZE = 220;
@@ -77,11 +77,13 @@ function decodeFrames(buffer: ArrayBuffer): AnimationFrame[] {
  * canvas and enlarge it with nearest-neighbor sampling (hard square blocks).
  * This avoids the soft smudge produced by CSS blur/transform tricks.
  */
-export function PixelSprite({ id, reveal, clear = false }: Props) {
+export function PixelSprite({ id, reveal, clear = false, onReady }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const readyRef = useRef(onReady);
+  readyRef.current = onReady;
   const revealRef = useRef(reveal);
   const clearRef = useRef(clear);
-  const [useStaticFallback, setUseStaticFallback] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   revealRef.current = reveal;
   clearRef.current = clear;
 
@@ -97,7 +99,7 @@ export function PixelSprite({ id, reveal, clear = false }: Props) {
     const outputCtx = output?.getContext('2d');
     const small = document.createElement('canvas');
     const smallCtx = small.getContext('2d');
-    setUseStaticFallback(false);
+    setLoadFailed(false);
 
     function draw() {
       if (!output || !outputCtx || !smallCtx || !animation.length) return;
@@ -141,13 +143,15 @@ export function PixelSprite({ id, reveal, clear = false }: Props) {
       for (const url of [spriteUrl(id), fallbackSpriteUrl(id)]) {
         if (cancelled) return;
         try {
-          const response = await fetch(url, { signal: controller.signal });
+          const response = await fetch(url, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) });
           if (!response.ok) throw new Error(`Sprite HTTP ${response.status}`);
           const decoded = decodeFrames(await response.arrayBuffer());
           if (cancelled) return;
           animation = decoded;
           currentFrame = 0;
           frameDeadline = 0;
+          draw();
+          readyRef.current?.();
           raf = requestAnimationFrame(tick);
           return;
         } catch (error) {
@@ -155,7 +159,29 @@ export function PixelSprite({ id, reveal, clear = false }: Props) {
           console.warn('Could not decode animated sprite:', url, error);
         }
       }
-      if (!cancelled) setUseStaticFallback(true);
+      // Keep the PNG fallback pixelated too; never expose a clear answer early.
+      try {
+        const response = await fetch(staticSpriteUrl(id), {
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]),
+        });
+        if (!response.ok) throw new Error('Static sprite unavailable');
+        const bitmap = await createImageBitmap(await response.blob());
+        if (cancelled) { bitmap.close(); return; }
+        const frame = document.createElement('canvas');
+        frame.width = bitmap.width;
+        frame.height = bitmap.height;
+        frame.getContext('2d')!.drawImage(bitmap, 0, 0);
+        bitmap.close();
+        animation = [{ canvas: frame, duration: 100 }];
+        draw();
+        readyRef.current?.();
+        raf = requestAnimationFrame(tick);
+      } catch {
+        if (!cancelled) {
+          setLoadFailed(true);
+          readyRef.current?.();
+        }
+      }
     }
 
     void load();
@@ -166,19 +192,11 @@ export function PixelSprite({ id, reveal, clear = false }: Props) {
     };
   }, [id]);
 
-  if (useStaticFallback) {
-    return (
-      <img
-        className="sprite-fallback"
-        src={staticSpriteUrl(id)}
-        alt={clear ? 'Revealed Pokémon' : 'Mystery Pokémon'}
-        draggable={false}
-      />
-    );
-  }
-
   return (
+    <>
+    {loadFailed && <span className="sprite-error" role="status">SPRITE UNAVAILABLE<br/>TRY SKIPPING THIS ROUND</span>}
     <canvas
+      hidden={loadFailed}
       ref={canvasRef}
       width={DISPLAY_SIZE}
       height={DISPLAY_SIZE}
@@ -186,5 +204,6 @@ export function PixelSprite({ id, reveal, clear = false }: Props) {
       role="img"
       aria-label={clear ? 'Revealed Pokémon' : 'Pixelated mystery Pokémon'}
     />
+    </>
   );
 }

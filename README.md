@@ -7,7 +7,15 @@ A retro-inspired, five-round Pokémon identification browser game built with **R
 - **Regular:** Four colored Kahoot-style multiple-choice buttons. One selection per round. A wrong choice immediately reveals the answer.
 - **Hard:** Type a Pokémon name (with suggestion buttons), and keep guessing until the round ends or you are correct.
 
-Each game chooses five distinct Pokémon. Sprites start pixelated and become clearer over a 20-second timer; correct guesses earn 1–3 points depending on remaining time. Both modes use the same final score screen.
+Each game chooses five distinct Pokémon. Sprites start pixelated and become clearer over a 10-second timer; correct guesses earn 1–3 points depending on remaining time. Both modes use the same final score screen.
+
+## Spawn and sound
+
+Each round loads its sprite, then plays a 1.4-second ball arrival, opening flash, and Pokémon emergence. The guessing timer and controls start only after the intro finishes (or **Skip intro** is selected). Reduced-motion preferences bypass the animated intro and flash. GIF frames keep moving throughout emergence and the existing progressive pixelation is preserved. The static PNG fallback now uses that same canvas pixelation; failed assets display a message instead of blocking the game. Each asset request has an eight-second timeout.
+
+**Sound on/off** remembers the player's choice when browser storage is available. Original Web Audio synthesis supplies the landing, release, correct, incorrect, and completion cues, with short envelopes and modest output gain. Audio starts only after a player interaction; unsupported or blocked audio does not prevent gameplay. Muting or skipping the intro cancels its pending sounds.
+
+The new sounds contain no third-party recordings or samples. The ball, flash, ring, and particles are drawn in CSS for this project; no video frames or game assets were extracted. Pokémon/Poké Ball designs and the existing remote sprites remain subject to their respective owners' rights. The reference video was not available during implementation, so the sequence follows the described arrival/opening/emergence rather than matching particular frames.
 
 ## Animated sprites
 
@@ -39,6 +47,19 @@ npm run preview
 - `src/pokemon.ts` — Pokémon pool, sprite URL providers, random selections
 - `src/PixelSprite.tsx` — animated canvas sampling and reveal
 - `src/style.css` — arcade-inspired styling and responsive layout
+- `src/SpawnEffect.tsx` — cancellable intro timing and decorative effect
+- `src/sound.ts` — original synthesized cues and audio controls
+
+## Browser checks
+
+```bash
+npm ci
+npx playwright install chromium
+npm test
+npm run build
+```
+
+For an already installed Edge browser, set `PLAYWRIGHT_CHANNEL=msedge` (PowerShell: `$env:PLAYWRIGHT_CHANNEL='msedge'`) before running tests. Tests use an original two-frame GIF fixture and cover loading/intro timing, moving frames, progressive pixelation, five-round replay, hard-mode timeout/focus, mobile layout, mute persistence, audio cues, and fallback rendering. For visual/audio review, also play both modes with real sprites, toggle sound during release, and enable the operating system's reduced-motion setting.
 
 ## Notes
 

@@ -1,13 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SpawnEffect } from './SpawnEffect';
+import { playSound, setSoundEnabled, stopSounds, unlockSound } from './sound';
 import { PixelSprite } from './PixelSprite';
 import { POKEMON, pickRounds, pickOptions, normalizeGuess, type Pokemon } from './pokemon';
 
 const ROUND_SECONDS = 10;
 type Mode = 'regular' | 'hard';
-type Stage = 'home' | 'playing' | 'reveal' | 'finished';
+type Stage = 'home' | 'spawning' | 'playing' | 'reveal' | 'finished';
 type Outcome = { pokemon: Pokemon; correct: boolean; points: number; guess: string };
 
 function App() {
+  const [sound, setSound] = useState(() => {
+    try { return localStorage.getItem('pokepixel-sound') !== 'off'; } catch { return true; }
+  });
+  const [spriteReady, setSpriteReady] = useState(false);
+  const onSpriteReady = useCallback(() => setSpriteReady(true), []);
+  const completeSpawn = useCallback(() => {
+    stopSounds();
+    setStage(old => old === 'spawning' ? 'playing' : old);
+  }, []);
+  useEffect(() => {
+    setSoundEnabled(sound);
+    try { localStorage.setItem('pokepixel-sound', sound ? 'on' : 'off'); } catch { /* Storage may be blocked. */ }
+  }, [sound]);
+  useEffect(() => () => stopSounds(), []);
   const [mode, setMode] = useState<Mode>('regular');
   const [choices, setChoices] = useState<Pokemon[][]>([]);
   const [stage, setStage] = useState<Stage>('home');
@@ -29,6 +45,9 @@ function App() {
   }, [guess]);
 
   function start() {
+    unlockSound();
+    stopSounds();
+    setSpriteReady(false);
     const selected = pickRounds();
     setRounds(selected);
     setChoices(selected.map(answer => {
@@ -36,12 +55,13 @@ function App() {
       return [...distractors, answer].sort(() => Math.random() - 0.5);
     }));
     setResults([]); setIndex(0); setSeconds(ROUND_SECONDS);
-    setGuess(''); setNotice(''); resolved.current = false; setStage('playing');
+    setGuess(''); setNotice(''); resolved.current = false; setStage('spawning');
   }
 
   function finishRound(correct: boolean, attempted: string) {
-    if (resolved.current || !current) return;
+    if (stage !== 'playing' || resolved.current || !current) return;
     resolved.current = true;
+    playSound(correct ? 'correct' : 'incorrect');
     const points = correct ? (seconds > ROUND_SECONDS * .7 ? 3 : seconds > ROUND_SECONDS * .35 ? 2 : 1) : 0;
     setResults(old => [...old, {pokemon: current, correct, points, guess: attempted}]);
     setStage('reveal');
@@ -52,6 +72,7 @@ function App() {
     const normalized = normalizeGuess(value);
     if (!normalized) return;
     if (normalized === normalizeGuess(current.name)) { finishRound(true, value); return; }
+    playSound('incorrect');
     setNotice('Not quite! Try again.');
     setGuess('');
     if (mode === 'hard') input.current?.focus();
@@ -64,10 +85,12 @@ function App() {
   }
 
   function next() {
-    if (index === rounds.length - 1) { setStage('finished'); return; }
+    unlockSound();
+    if (index === rounds.length - 1) { playSound('complete'); setStage('finished'); return; }
+    setSpriteReady(false);
     resolved.current = false;
     setIndex(old => old + 1); setSeconds(ROUND_SECONDS);
-    setGuess(''); setNotice(''); setStage('playing');
+    setGuess(''); setNotice(''); setStage('spawning');
   }
 
   useEffect(() => {
@@ -97,16 +120,16 @@ function App() {
         <p>FIVE MYSTERIES. ONE TRAINER. HOW FAST CAN YOU GUESS?</p>
       </section>
       <section className="game-shell">
-        <div className="shell-head"><div>◈ POKÉPIXEL <span> / ARCADE</span></div><div><i className="led"/> ONLINE</div></div>
+        <div className="shell-head"><div>◈ POKÉPIXEL <span> / ARCADE</span></div><button className="sound-toggle" aria-pressed={sound} aria-label="Sound effects" onClick={() => { const value = !sound; setSoundEnabled(value); if (value) unlockSound(); setSound(value); }}>SOUND {sound ? 'ON ♪' : 'OFF'}</button></div>
         {stage === 'home' && <div className="home-screen">
           <div className="scene home-scene"><div className="sun"/><div className="mountain mountain-a"/><div className="mountain mountain-b"/><div className="grass ground"/><div className="arena"/><div className="question">?</div><div className="scene-caption">A NEW CHALLENGE AWAITS...</div></div>
-          <div className="panel home-panel"><div className="micro">READY, TRAINER?</div><h2>TEST YOUR POKÉMON KNOWLEDGE!</h2><p>GUESS 5 RANDOM POKÉMON AS THEIR SPRITES COME INTO FOCUS. GUESS EARLY TO EARN MORE POINTS!</p><div className="features"><span>◷ 20 SEC / ROUND</span><span>★ 15 MAX POINTS</span><span>◈ GEN 5 ANIMATIONS</span></div><div className="mode-picker" role="group" aria-label="Choose a game mode"><button className={mode === 'regular' ? 'mode-option selected' : 'mode-option'} onClick={() => setMode('regular')} aria-pressed={mode === 'regular'}><strong>⚡ REGULAR</strong><span>4 CHOICES · KAHOOT STYLE</span></button><button className={mode === 'hard' ? 'mode-option selected' : 'mode-option'} onClick={() => setMode('hard')} aria-pressed={mode === 'hard'}><strong>★ HARD</strong><span>TYPE THE NAME YOURSELF</span></button></div><button className="primary" onClick={start}>▶ START {mode.toUpperCase()} CHALLENGE</button></div>
+          <div className="panel home-panel"><div className="micro">READY, TRAINER?</div><h2>TEST YOUR POKÉMON KNOWLEDGE!</h2><p>GUESS 5 RANDOM POKÉMON AS THEIR SPRITES COME INTO FOCUS. GUESS EARLY TO EARN MORE POINTS!</p><div className="features"><span>◷ {ROUND_SECONDS} SEC / ROUND</span><span>★ 15 MAX POINTS</span><span>◈ GEN 5 ANIMATIONS</span></div><div className="mode-picker" role="group" aria-label="Choose a game mode"><button className={mode === 'regular' ? 'mode-option selected' : 'mode-option'} onClick={() => setMode('regular')} aria-pressed={mode === 'regular'}><strong>⚡ REGULAR</strong><span>4 CHOICES · KAHOOT STYLE</span></button><button className={mode === 'hard' ? 'mode-option selected' : 'mode-option'} onClick={() => setMode('hard')} aria-pressed={mode === 'hard'}><strong>★ HARD</strong><span>TYPE THE NAME YOURSELF</span></button></div><button className="primary" onClick={start}>▶ START {mode.toUpperCase()} CHALLENGE</button></div>
         </div>}
-        {(stage === 'playing' || stage === 'reveal') && current && <>
+        {(stage === 'spawning' || stage === 'playing' || stage === 'reveal') && current && <>
           <div className="status"><span>{mode.toUpperCase()} · ROUND <b>{String(index+1).padStart(2,'0')}</b> / 05</span><span>★ SCORE <b>{score.toString().padStart(2,'0')}</b></span><span>◷ <b className={seconds < 5 && stage === 'playing'?'danger':''}>{Math.ceil(seconds).toString().padStart(2,'0')}s</b></span></div>
-          <div className="scene"><div className="sun"/><div className="mountain mountain-a"/><div className="mountain mountain-b"/><div className="grass ground"/><div className="arena"/><div className="sprite-wrap"><PixelSprite id={current.id} reveal={progress} clear={stage === 'reveal'}/></div><div className="scene-caption">{stage === 'reveal' ? `IT'S ${current.name.toUpperCase()}!` : 'WHO COULD IT BE?'}</div></div>
+          <div className="scene"><div className="sun"/><div className="mountain mountain-a"/><div className="mountain mountain-b"/><div className="grass ground"/><div className="arena"/><div className={`sprite-wrap ${stage === 'spawning' ? (spriteReady ? 'sprite-emerging' : 'sprite-waiting') : ''}`}><PixelSprite key={current.id} id={current.id} reveal={progress} clear={stage === 'reveal'} onReady={onSpriteReady}/></div>{stage === 'spawning' && <SpawnEffect ready={spriteReady} onComplete={completeSpawn}/>} <div className="scene-caption">{stage === 'reveal' ? `IT'S ${current.name.toUpperCase()}!` : stage === 'spawning' ? (spriteReady ? 'A WILD MYSTERY APPEARS!' : 'PREPARING YOUR ENCOUNTER...') : 'WHO COULD IT BE?'}</div></div>
           <div className="panel">
-            {stage === 'playing' ? <>
+            {stage === 'spawning' ? <div className="spawn-panel"><span role="status">{spriteReady ? 'GET READY, TRAINER!' : 'LOADING POKÉMON...'}</span><button className="skip" disabled={!spriteReady} onClick={completeSpawn}>SKIP INTRO →</button></div> : stage === 'playing' ? <>
               <div className="panel-row"><span>IDENTIFICATION IN PROGRESS...</span><b>{Math.floor(progress*100)}%</b></div>
               <div className="progress-track"><div style={{width:`${progress*100}%`}}/></div>
               {mode === 'regular' ? <div className="choice-grid" role="group" aria-label="Choose the Pokémon">

@@ -92,6 +92,7 @@ test('mobile layout fits and unavailable GIFs reach the static fallback', async 
 });
 
 test('original audio starts after interaction, mute stops it, and correct guesses score once', async ({ page }) => {
+  await page.getByRole('button', { name: 'Music', exact: true }).click();
   let id = 0;
   await page.route('**/*.gif', route => {
     id = Number(route.request().url().match(/(\d+)\.gif/)![1]);
@@ -121,6 +122,65 @@ test('original audio starts after interaction, mute stops it, and correct guesse
   await expect(page.locator('.reveal-panel')).toContainText('+3 POINTS');
   await expect(page.locator('.status')).toContainText('SCORE 03');
   expect(await page.evaluate(() => (window as any).sounds.started)).toBeGreaterThan(starts);
+});
+
+test('HP timer drains through scoring tiers and stays full during spawn', async ({ page }) => {
+  await page.clock.install();
+  await page.getByRole('button', { name: /START REGULAR/ }).click();
+  await expect(page.getByRole('progressbar', { name: 'Time remaining' })).toHaveAttribute('aria-valuenow', '10');
+  await expect(page.locator('.timer-points')).toContainText('3 PTS.');
+  await page.getByRole('button', { name: 'SKIP INTRO' }).click();
+  await page.clock.runFor(3100);
+  await expect(page.locator('.round-timer')).toHaveClass(/tier-2/);
+  await expect(page.locator('.timer-points')).toContainText('2 PTS.');
+  await page.clock.runFor(3500);
+  await expect(page.locator('.round-timer')).toHaveClass(/tier-1/);
+  await expect(page.locator('.timer-points')).toContainText('1 PT.');
+  const scale = await page.locator('.hp-fill').evaluate(el => getComputedStyle(el).transform);
+  expect(Number(scale.match(/matrix\(([^,]+)/)![1])).toBeLessThan(.36);
+  await page.clock.runFor(3500);
+  await expect(page.locator('.reveal-panel')).toBeVisible();
+  await page.getByRole('button', { name: /NEXT ROUND/ }).click();
+  await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');
+  await expect(page.locator('.round-timer')).toHaveClass(/tier-3/);
+});
+
+test('music is independent, stops when hidden, and remembers its preference', async ({ page }) => {
+  await page.evaluate(() => {
+    (window as any).musicNotes = 0;
+    const create = AudioContext.prototype.createOscillator;
+    AudioContext.prototype.createOscillator = function () {
+      const voice = create.call(this);
+      const start = voice.start.bind(voice);
+      voice.start = time => { if (voice.type === 'square') (window as any).musicNotes++; start(time); };
+      return voice;
+    };
+  });
+  expect(await page.evaluate(() => (window as any).musicNotes)).toBe(0);
+  await page.getByRole('button', { name: 'Sound effects' }).click();
+  await page.getByRole('button', { name: /START REGULAR/ }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).musicNotes)).toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'Music', exact: true }).click();
+  const muted = await page.evaluate(() => (window as any).musicNotes);
+  await page.waitForTimeout(600);
+  expect(await page.evaluate(() => (window as any).musicNotes)).toBe(muted);
+  await page.getByRole('button', { name: 'Music', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).musicNotes)).toBeGreaterThan(muted);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const hidden = await page.evaluate(() => (window as any).musicNotes);
+  await page.waitForTimeout(600);
+  expect(await page.evaluate(() => (window as any).musicNotes)).toBe(hidden);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(() => page.evaluate(() => (window as any).musicNotes)).toBeGreaterThan(hidden);
+  await page.getByRole('button', { name: 'Music', exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Music', exact: true })).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('PNG fallback stays on the pixelation canvas and unavailable audio is harmless', async ({ page }) => {

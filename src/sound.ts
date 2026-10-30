@@ -1,9 +1,82 @@
 // Original synthesized arcade cues: no recordings, samples, or game audio.
-type Cue = 'land' | 'release' | 'correct' | 'incorrect' | 'complete';
+type Cue = 'land' | 'release' | 'correct' | 'incorrect' | 'complete' | 'select' | 'tick' | 'tier' | 'timeout' | 'skip';
 let context: AudioContext | undefined;
 let master: GainNode | undefined;
 let enabled = true;
 const voices = new Set<OscillatorNode>();
+let musicEnabled = true;
+let musicActive = false;
+let musicBus: GainNode | undefined;
+let musicTimer: number | undefined;
+let step = 0;
+let nextBeat = 0;
+const musicVoices = new Set<OscillatorNode>();
+
+// Original 8-bar loop, 120 BPM: a quiet pulse lead, bass, and soft kick.
+// MIDI pitches and rhythm were composed for this game, not transcribed.
+const melody = [72, 0, 79, 76, 0, 74, 76, 0, 81, 79, 0, 76, 74, 0, 71, 0,
+  69, 0, 76, 72, 0, 74, 77, 0, 76, 72, 0, 69, 71, 0, 74, 0,
+  65, 0, 72, 77, 0, 76, 74, 0, 72, 69, 0, 72, 76, 0, 74, 0,
+  67, 0, 74, 79, 0, 77, 76, 0, 74, 71, 0, 67, 71, 74, 0, 79];
+const bass = [48, 45, 41, 43];
+const hz = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
+
+function stopMusic() {
+  window.clearInterval(musicTimer);
+  musicTimer = undefined;
+  for (const voice of musicVoices) {
+    try { voice.stop(); } catch { /* Already ended. */ }
+  }
+  musicVoices.clear();
+}
+
+function musicNote(frequency: number, time: number, duration: number, volume: number, type: OscillatorType, kick = false) {
+  if (!context || !musicBus) return;
+  const voice = context.createOscillator();
+  const gain = context.createGain();
+  voice.type = type;
+  voice.frequency.setValueAtTime(frequency, time);
+  if (kick) voice.frequency.exponentialRampToValueAtTime(45, time + duration);
+  gain.gain.setValueAtTime(0, time);
+  gain.gain.linearRampToValueAtTime(volume, time + .008);
+  gain.gain.exponentialRampToValueAtTime(.001, time + duration);
+  voice.connect(gain);
+  gain.connect(musicBus);
+  musicVoices.add(voice);
+  voice.onended = () => { musicVoices.delete(voice); voice.disconnect(); gain.disconnect(); };
+  voice.start(time);
+  voice.stop(time + duration + .02);
+}
+
+function syncMusic() {
+  if (!musicEnabled || !musicActive || document.hidden || context?.state !== 'running') {
+    stopMusic();
+    return;
+  }
+  if (musicTimer !== undefined) return;
+  step = 0;
+  nextBeat = context.currentTime + .04;
+  const schedule = () => {
+    if (!context || context.state !== 'running') return;
+    // Never dump missed notes on return from a throttled/background tab.
+    if (nextBeat < context.currentTime) nextBeat = context.currentTime + .04;
+    while (nextBeat < context.currentTime + .15) {
+      const note = melody[step % melody.length];
+      if (note) musicNote(hz(note), nextBeat, .19, .12, 'square');
+      if (step % 2 === 0) musicNote(hz(bass[Math.floor(step / 16) % 4] + (step % 4 === 2 ? 12 : 0)), nextBeat, .35, .28, 'triangle');
+      if (step % 4 === 0) musicNote(110, nextBeat, .13, .3, 'sine', true);
+      nextBeat += .25;
+      step++;
+    }
+  };
+  schedule();
+  musicTimer = window.setInterval(schedule, 25);
+}
+
+export function setMusicEnabled(value: boolean) { musicEnabled = value; syncMusic(); }
+export function setMusicActive(value: boolean) { musicActive = value; syncMusic(); }
+export function handleAudioVisibility() { if (document.hidden) stopSounds(); syncMusic(); }
+export function stopAllAudio() { stopSounds(); musicActive = false; stopMusic(); }
 
 export function stopSounds() {
   for (const voice of voices) {
@@ -19,23 +92,30 @@ export function setSoundEnabled(value: boolean) {
 
 // Call synchronously from a click/keyboard handler to respect autoplay policy.
 export function unlockSound() {
-  if (!enabled) return;
   try {
     context ??= new AudioContext();
     if (!master) {
       master = context.createGain();
       master.gain.value = 0.18;
       master.connect(context.destination);
+      musicBus = context.createGain();
+      musicBus.gain.value = .16;
+      musicBus.connect(context.destination);
     }
-    void context.resume().catch(() => {});
+    void context.resume().then(syncMusic).catch(() => {});
   } catch { /* Audio is optional; gameplay works without Web Audio. */ }
 }
 
 export function playSound(cue: Cue) {
-  if (!enabled || !context || !master || context.state !== 'running') return;
+  if (!enabled || document.hidden || !context || !master || context.state !== 'running') return;
   stopSounds();
   const ctx = context;
   const notes: [number, number, number, number][] = {
+    select: [[740, 990, 0, .065]],
+    tick: [[880, 660, 0, .07]],
+    tier: [[660, 440, 0, .09], [440, 330, .09, .1]],
+    timeout: [[330, 220, 0, .17], [220, 110, .18, .3], [110, 55, .42, .22]],
+    skip: [[440, 220, 0, .12]],
     land: [[130, 55, 0, .14]],
     release: [[260, 1040, 0, .24], [1040, 1560, .12, .28], [1560, 2080, .24, .22]],
     correct: [[523.25, 523.25, 0, .12], [659.25, 659.25, .11, .12], [783.99, 783.99, .22, .24]],

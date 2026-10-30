@@ -15,7 +15,13 @@ Each round loads its sprite, then plays a 1.4-second ball arrival, opening flash
 
 **Sound on/off** remembers the player's choice when browser storage is available. Original Web Audio synthesis supplies the landing, release, correct, incorrect, and completion cues, with short envelopes and modest output gain. Audio starts only after a player interaction; unsupported or blocked audio does not prevent gameplay. Muting or skipping the intro cancels its pending sounds.
 
-The new sounds contain no third-party recordings or samples. The ball, flash, ring, and particles are drawn in CSS for this project; no video frames or game assets were extracted. Pokémon/Poké Ball designs and the existing remote sprites remain subject to their respective owners' rights. The reference video was not available during implementation, so the sequence follows the described arrival/opening/emergence rather than matching particular frames.
+The new sounds contain no third-party recordings or samples. The ball, flash, ring, and particles are drawn in CSS for this project; no video frames or game assets were extracted. Pokémon/Poké Ball designs and the existing remote sprites remain subject to their respective owners' rights. The supplied reference clip informs the arrival/opening/emergence and HP-style timer; no media from the clip is bundled.
+
+## Music and HP timer
+
+The reference-inspired, segmented HP timer drains from green (3 points) to yellow (2 points) to red (1 point). Its labels share the exact scoring thresholds: more than 70% remaining earns 3 points, more than 35% earns 2, otherwise 1. It stays full until the spawn intro ends and resets every round.
+
+An original eight-bar, 120 BPM chiptune loop adds pulse melody, triangle bass, and a soft synthesized kick during the challenge. Music and sound effects have independent, remembered toggles. The music scheduler uses the Web Audio clock, stops when hidden or outside the challenge, and resumes without playing a backlog. Effects include selection, point-tier changes, final-three-second ticks, skipping, and a distinct timeout cue. Music has its own quiet channel, so effects cannot accidentally stop or restart the loop.
 
 ## Animated sprites
 
@@ -48,7 +54,8 @@ npm run preview
 - `src/PixelSprite.tsx` — animated canvas sampling and reveal
 - `src/style.css` — arcade-inspired styling and responsive layout
 - `src/SpawnEffect.tsx` — cancellable intro timing and decorative effect
-- `src/sound.ts` — original synthesized cues and audio controls
+- `src/sound.ts` — original synthesized cues, music scheduler, and independent audio controls
+- `src/TimerBar.tsx` — HP countdown and shared scoring thresholds
 
 ## Browser checks
 
@@ -59,7 +66,7 @@ npm test
 npm run build
 ```
 
-For an already installed Edge browser, set `PLAYWRIGHT_CHANNEL=msedge` (PowerShell: `$env:PLAYWRIGHT_CHANNEL='msedge'`) before running tests. Tests use an original two-frame GIF fixture and cover loading/intro timing, moving frames, progressive pixelation, five-round replay, hard-mode timeout/focus, mobile layout, mute persistence, audio cues, and fallback rendering. For visual/audio review, also play both modes with real sprites, toggle sound during release, and enable the operating system's reduced-motion setting.
+For an already installed Edge browser, set `PLAYWRIGHT_CHANNEL=msedge` (PowerShell: `$env:PLAYWRIGHT_CHANNEL='msedge'`) before running tests. Tests use an original two-frame GIF fixture and cover loading/intro timing, moving frames, progressive pixelation, five-round replay, hard-mode timeout/focus, mobile layout, mute persistence, audio cues, fallback rendering, HP timer thresholds/reset, independent music controls, visibility suspension, and music preference persistence. For visual/audio review, also play both modes with real sprites, toggle sound during release, and enable the operating system's reduced-motion setting.
 
 ## Notes
 

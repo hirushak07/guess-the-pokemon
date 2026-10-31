@@ -109,6 +109,15 @@ test('original audio starts after interaction, mute stops it, and correct guesse
       oscillator.stop = time => { (window as any).sounds.stopped++; stop(time); };
       return oscillator;
     };
+    const createSample = AudioContext.prototype.createBufferSource;
+    AudioContext.prototype.createBufferSource = function () {
+      const source = createSample.call(this);
+      const start = source.start.bind(source);
+      const stop = source.stop.bind(source);
+      source.start = (...args) => { (window as any).sounds.started++; start(...args); };
+      source.stop = (...args) => { (window as any).sounds.stopped++; stop(...args); };
+      return source;
+    };
   });
   await expect.poll(() => page.evaluate(() => (window as any).sounds.started)).toBe(0);
   await page.getByRole('button', { name: /START REGULAR/ }).click();
@@ -193,13 +202,18 @@ test('music plays on home, through results and hidden tabs, and remembers mute',
   await expect(page.getByRole('button', { name: 'Music', exact: true })).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('recorded release plays through normal emergence and stops on mute or intro skip', async ({ page }) => {
+test('Gen 3 throw leads the ball, release follows, and success uses the selected recording', async ({ page }) => {
+  let id = 0;
+  await page.route('**/*.gif', route => {
+    id = Number(route.request().url().match(/(\d+)\.gif/)![1]);
+    return route.fulfill({ contentType: 'image/gif', body: gif });
+  });
   await page.evaluate(() => {
-    (window as any).releaseAudio = { decoded: false, starts: 0, stops: 0 };
+    (window as any).recordings = { decoded: 0, events: [], stops: 0 };
     const decode = AudioContext.prototype.decodeAudioData;
     AudioContext.prototype.decodeAudioData = function (...args: any[]) {
       const result = (decode as any).apply(this, args);
-      result.then(() => { (window as any).releaseAudio.decoded = true; });
+      result.then(() => { (window as any).recordings.decoded++; });
       return result;
     };
     const create = AudioContext.prototype.createBufferSource;
@@ -207,25 +221,45 @@ test('recorded release plays through normal emergence and stops on mute or intro
       const source = create.call(this);
       const start = source.start.bind(source);
       const stop = source.stop.bind(source);
-      source.start = (...args) => { (window as any).releaseAudio.starts++; start(...args); };
-      source.stop = (...args) => { (window as any).releaseAudio.stops++; stop(...args); };
+      source.start = (...args) => {
+        const ball = document.querySelector('.spawn-ball');
+        (window as any).recordings.events.push({ duration: source.buffer?.duration, at: performance.now(), ballOpacity: ball ? getComputedStyle(ball).opacity : null });
+        start(...args);
+      };
+      source.stop = (...args) => { (window as any).recordings.stops++; stop(...args); };
       return source;
     };
   });
   await page.getByRole('heading', { level: 1 }).click();
-  await expect.poll(() => page.evaluate(() => (window as any).releaseAudio.decoded)).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as any).recordings.decoded)).toBe(3);
   await page.getByRole('button', { name: /START REGULAR/ }).click();
-  await expect.poll(() => page.evaluate(() => (window as any).releaseAudio.starts)).toBe(1);
   await expect(page.locator('.choice')).toHaveCount(4);
-  expect(await page.evaluate(() => (window as any).releaseAudio.stops)).toBe(0);
+  const events = await page.evaluate(() => (window as any).recordings.events);
+  expect(events).toHaveLength(2);
+  expect(events[0].ballOpacity).toBe('0');
+  expect(events[0].duration).toBeCloseTo(.617, 1);
+  expect(events[1].duration).toBeCloseTo(.604, 1);
+  expect(events[1].at - events[0].at).toBeGreaterThan(650);
+  expect(await page.evaluate(() => (window as any).recordings.stops)).toBe(0);
+  await page.locator('.choice').filter({ hasText: POKEMON.find(p => p.id === id)!.name }).click();
+  const success = await page.evaluate(() => (window as any).recordings.events[2]);
+  expect(success.duration).toBeGreaterThan(.9);
+  expect(success.duration).toBeLessThan(1.1);
+  await page.getByRole('button', { name: /NEXT ROUND/ }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).recordings.events.length), { intervals: [25] }).toBe(5);
+  const beforeMute = await page.evaluate(() => (window as any).recordings.stops);
   await page.getByRole('button', { name: 'Sound effects' }).click();
-  expect(await page.evaluate(() => (window as any).releaseAudio.stops)).toBe(1);
+  expect(await page.evaluate(() => (window as any).recordings.stops)).toBe(beforeMute + 1);
+  await expect(page.locator('.choice')).toHaveCount(4);
   await page.getByRole('button', { name: 'SKIP →', exact: true }).click();
   await page.getByRole('button', { name: 'Sound effects' }).click();
   await page.getByRole('button', { name: /NEXT ROUND/ }).click();
-  await expect.poll(() => page.evaluate(() => (window as any).releaseAudio.starts)).toBe(2);
+  await expect.poll(() => page.evaluate(() => (window as any).recordings.events.length), { intervals: [25] }).toBe(6);
+  const beforeSkip = await page.evaluate(() => (window as any).recordings.stops);
   await page.getByRole('button', { name: 'SKIP INTRO' }).click();
-  expect(await page.evaluate(() => (window as any).releaseAudio.stops)).toBe(2);
+  expect(await page.evaluate(() => (window as any).recordings.stops)).toBe(beforeSkip + 1);
+  await page.waitForTimeout(900);
+  expect(await page.evaluate(() => (window as any).recordings.events.length)).toBe(6);
 });
 
 test('PNG fallback stays on the pixelation canvas and unavailable audio is harmless', async ({ page }) => {

@@ -1,18 +1,19 @@
 import { useEffect } from 'react';
 import { playSound, stopSounds } from './sound';
 
-export const SPAWN_DURATION = 1400;
+export const SPAWN_DURATION = 1600;
 
 export function SpawnEffect({ ready, onComplete }: { ready: boolean; onComplete: () => void }) {
   useEffect(() => {
     if (!ready) return;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let completed = false;
-    const landing = window.setTimeout(() => playSound('land'), 260);
-    const release = window.setTimeout(() => playSound('release'), 560);
+    // Throw leads the visuals by 200ms; its full tail ends before the pop.
+    const throwing = window.setTimeout(() => playSound('throw'), 0);
+    const release = window.setTimeout(() => playSound('release'), reduced ? 40 : 760);
     const finish = window.setTimeout(() => { completed = true; onComplete(); }, reduced ? 100 : SPAWN_DURATION);
     return () => {
-      clearTimeout(landing);
+      clearTimeout(throwing);
       clearTimeout(release);
       clearTimeout(finish);
       if (!completed) stopSounds();

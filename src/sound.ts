@@ -1,18 +1,27 @@
-// Original synthesized arcade cues plus the attributed release recording.
-type Cue = 'land' | 'release' | 'correct' | 'incorrect' | 'complete' | 'select' | 'tick' | 'tier' | 'timeout' | 'skip';
+// Original synthesized arcade cues plus the three attributed recordings.
+type Cue = 'throw' | 'land' | 'release' | 'correct' | 'incorrect' | 'complete' | 'select' | 'tick' | 'tier' | 'timeout' | 'skip';
 let context: AudioContext | undefined;
 let master: GainNode | undefined;
 let enabled = true;
 const voices = new Set<AudioScheduledSourceNode>();
-let releaseBuffer: AudioBuffer | undefined;
-let releaseLoad: Promise<void> | undefined;
+const recordings = {
+  throw: new URL('./assets/pokeball-throw-gen3.wav', import.meta.url),
+  release: new URL('./assets/pokeball-release-gen3.wav', import.meta.url),
+  correct: new URL('./assets/pokemon-success.mp3', import.meta.url),
+};
+type RecordedCue = keyof typeof recordings;
+const buffers: Partial<Record<RecordedCue, AudioBuffer>> = {};
+const loads: Partial<Record<RecordedCue, Promise<void>>> = {};
 
-function loadReleaseSound(ctx: AudioContext) {
-  releaseLoad ??= fetch(new URL('./assets/pokeball-release.mp3', import.meta.url), { signal: AbortSignal.timeout(8000) })
-    .then(response => { if (!response.ok) throw new Error('Release audio unavailable'); return response.arrayBuffer(); })
-    .then(bytes => ctx.decodeAudioData(bytes))
-    .then(buffer => { releaseBuffer = buffer; })
-    .catch(() => { releaseLoad = undefined; }); // Keep the synthesized fallback; retry on interaction.
+function loadRecordedSounds(ctx: AudioContext) {
+  return Promise.all((Object.keys(recordings) as RecordedCue[]).map(cue => {
+    loads[cue] ??= fetch(recordings[cue], { signal: AbortSignal.timeout(8000) })
+      .then(response => { if (!response.ok) throw new Error('Audio unavailable'); return response.arrayBuffer(); })
+      .then(bytes => ctx.decodeAudioData(bytes))
+      .then(buffer => { buffers[cue] = buffer; })
+      .catch(() => { delete loads[cue]; }); // Fall back independently; retry on interaction.
+    return loads[cue];
+  })).then(() => {});
 }
 let musicEnabled = true;
 let musicActive = false;
@@ -103,7 +112,7 @@ export function setSoundEnabled(value: boolean) {
 }
 
 // Call synchronously from a click/keyboard handler to respect autoplay policy.
-export function unlockSound() {
+export function unlockSound(): Promise<void> {
   try {
     context ??= new AudioContext();
     if (!master) {
@@ -114,18 +123,19 @@ export function unlockSound() {
       musicBus.gain.value = .16;
       musicBus.connect(context.destination);
     }
-    loadReleaseSound(context);
-    void context.resume().then(syncMusic).catch(() => {});
+    return Promise.all([loadRecordedSounds(context), context.resume().then(syncMusic).catch(() => {})]).then(() => {});
   } catch { /* Audio is optional; gameplay works without Web Audio. */ }
+  return Promise.resolve();
 }
 
 export function playSound(cue: Cue) {
   if (!enabled || document.hidden || !context || !master || context.state !== 'running') return;
   stopSounds();
   const ctx = context;
-  if (cue === 'release' && releaseBuffer) {
+  const recording = buffers[cue as RecordedCue];
+  if (recording) {
     const source = ctx.createBufferSource();
-    source.buffer = releaseBuffer;
+    source.buffer = recording;
     source.connect(master);
     voices.add(source);
     source.onended = () => { voices.delete(source); source.disconnect(); };
@@ -133,6 +143,7 @@ export function playSound(cue: Cue) {
     return;
   }
   const notes: [number, number, number, number][] = {
+    throw: [[180, 960, 0, .25], [960, 320, .18, .25]],
     select: [[740, 990, 0, .065]],
     tick: [[880, 660, 0, .07]],
     tier: [[660, 440, 0, .09], [440, 330, .09, .1]],

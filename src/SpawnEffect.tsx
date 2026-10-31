@@ -7,14 +7,15 @@ export function SpawnEffect({ ready, onComplete }: { ready: boolean; onComplete:
   useEffect(() => {
     if (!ready) return;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let completed = false;
     const landing = window.setTimeout(() => playSound('land'), 260);
     const release = window.setTimeout(() => playSound('release'), 560);
-    const finish = window.setTimeout(onComplete, reduced ? 100 : SPAWN_DURATION);
+    const finish = window.setTimeout(() => { completed = true; onComplete(); }, reduced ? 100 : SPAWN_DURATION);
     return () => {
       clearTimeout(landing);
       clearTimeout(release);
       clearTimeout(finish);
-      stopSounds();
+      if (!completed) stopSounds();
     };
   }, [ready, onComplete]);
 

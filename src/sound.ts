@@ -1,9 +1,19 @@
-// Original synthesized arcade cues: no recordings, samples, or game audio.
+// Original synthesized arcade cues plus the attributed release recording.
 type Cue = 'land' | 'release' | 'correct' | 'incorrect' | 'complete' | 'select' | 'tick' | 'tier' | 'timeout' | 'skip';
 let context: AudioContext | undefined;
 let master: GainNode | undefined;
 let enabled = true;
-const voices = new Set<OscillatorNode>();
+const voices = new Set<AudioScheduledSourceNode>();
+let releaseBuffer: AudioBuffer | undefined;
+let releaseLoad: Promise<void> | undefined;
+
+function loadReleaseSound(ctx: AudioContext) {
+  releaseLoad ??= fetch(new URL('./assets/pokeball-release.mp3', import.meta.url), { signal: AbortSignal.timeout(8000) })
+    .then(response => { if (!response.ok) throw new Error('Release audio unavailable'); return response.arrayBuffer(); })
+    .then(bytes => ctx.decodeAudioData(bytes))
+    .then(buffer => { releaseBuffer = buffer; })
+    .catch(() => { releaseLoad = undefined; }); // Keep the synthesized fallback; retry on interaction.
+}
 let musicEnabled = true;
 let musicActive = false;
 let musicBus: GainNode | undefined;
@@ -104,6 +114,7 @@ export function unlockSound() {
       musicBus.gain.value = .16;
       musicBus.connect(context.destination);
     }
+    loadReleaseSound(context);
     void context.resume().then(syncMusic).catch(() => {});
   } catch { /* Audio is optional; gameplay works without Web Audio. */ }
 }
@@ -112,6 +123,15 @@ export function playSound(cue: Cue) {
   if (!enabled || document.hidden || !context || !master || context.state !== 'running') return;
   stopSounds();
   const ctx = context;
+  if (cue === 'release' && releaseBuffer) {
+    const source = ctx.createBufferSource();
+    source.buffer = releaseBuffer;
+    source.connect(master);
+    voices.add(source);
+    source.onended = () => { voices.delete(source); source.disconnect(); };
+    source.start();
+    return;
+  }
   const notes: [number, number, number, number][] = {
     select: [[740, 990, 0, .065]],
     tick: [[880, 660, 0, .07]],

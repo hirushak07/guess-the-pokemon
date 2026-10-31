@@ -13,13 +13,13 @@ Each game chooses five distinct Pokémon. Sprites start pixelated and become cle
 
 Each round loads its sprite, then plays a 1.4-second ball arrival, opening flash, and Pokémon emergence. The guessing timer and controls start only after the intro finishes (or **Skip intro** is selected). Reduced-motion preferences bypass the animated intro and flash. GIF frames keep moving throughout emergence and the existing progressive pixelation is preserved. The static PNG fallback now uses that same canvas pixelation; failed assets display a message instead of blocking the game. Each asset request has an eight-second timeout.
 
-**Sound on/off** remembers the player's choice when browser storage is available. Original Web Audio synthesis supplies the landing, release, correct, incorrect, and completion cues, with short envelopes and modest output gain. Audio starts only after a player interaction; unsupported or blocked audio does not prevent gameplay. Muting or skipping the intro cancels its pending sounds.
+**Sound on/off** remembers the player's choice when browser storage is available. Web Audio supplies original synthesized cues plus a bundled Poké Ball release recording, with short envelopes and modest output gain. Audio starts only after a player interaction; unsupported or blocked audio does not prevent gameplay. Muting or skipping the intro cancels its pending sounds.
 
-The new sounds contain no third-party recordings or samples. The ball, flash, ring, and particles are drawn in CSS for this project; no video frames or game assets were extracted. Pokémon/Poké Ball designs and the existing remote sprites remain subject to their respective owners' rights. The supplied reference clip informs the arrival/opening/emergence and HP-style timer; no media from the clip is bundled.
+The Poké Ball release is a third-party recording requested for this fan game; its source and edits are documented in [asset attribution](src/assets/ATTRIBUTION.md). Its source does not provide an open redistribution license. All other effects and music are original synthesis. The ball, flash, ring, and particles are drawn in CSS for this project; no video frames or game assets were extracted. Pokémon/Poké Ball designs and the existing remote sprites remain subject to their respective owners' rights. The supplied reference clip informs the arrival/opening/emergence and HP-style timer; no media from the clip is bundled.
 
 ## Music and HP timer
 
-The reference-inspired, segmented HP timer drains from green (3 points) to yellow (2 points) to red (1 point). Its labels share the exact scoring thresholds: more than 70% remaining earns 3 points, more than 35% earns 2, otherwise 1. It stays full until the spawn intro ends and resets every round.
+The reference-inspired HP timer has two dividers at the scoring boundaries (35% and 70% remaining), leaving the 2-point section uninterrupted. It drains from green (3 points) to yellow (2 points) to red (1 point). Its labels share the exact scoring thresholds: more than 70% remaining earns 3 points, more than 35% earns 2, otherwise 1. It stays full until the spawn intro ends and resets every round.
 
 An original eight-bar, 120 BPM chiptune loop adds pulse melody, triangle bass, and a soft synthesized kick while the site is open, including the home screen and results. Playback begins after the first click or keypress because browsers restrict autoplay. Music and sound effects have independent, remembered toggles. The music scheduler uses the Web Audio clock, continues across screens and background tabs, and avoids playing a backlog if the browser suspends the page. Closing the page or switching music off stops playback. Effects include selection, point-tier changes, final-three-second ticks, skipping, and a distinct timeout cue. Music has its own quiet channel, so effects cannot accidentally stop or restart the loop.
 
@@ -54,7 +54,7 @@ npm run preview
 - `src/PixelSprite.tsx` — animated canvas sampling and reveal
 - `src/style.css` — arcade-inspired styling and responsive layout
 - `src/SpawnEffect.tsx` — cancellable intro timing and decorative effect
-- `src/sound.ts` — original synthesized cues, music scheduler, and independent audio controls
+- `src/sound.ts` — release recording playback, synthesized cues, music scheduler, and independent audio controls
 - `src/TimerBar.tsx` — HP countdown and shared scoring thresholds
 
 ## Browser checks

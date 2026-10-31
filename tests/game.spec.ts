@@ -193,6 +193,41 @@ test('music plays on home, through results and hidden tabs, and remembers mute',
   await expect(page.getByRole('button', { name: 'Music', exact: true })).toHaveAttribute('aria-pressed', 'false');
 });
 
+test('recorded release plays through normal emergence and stops on mute or intro skip', async ({ page }) => {
+  await page.evaluate(() => {
+    (window as any).releaseAudio = { decoded: false, starts: 0, stops: 0 };
+    const decode = AudioContext.prototype.decodeAudioData;
+    AudioContext.prototype.decodeAudioData = function (...args: any[]) {
+      const result = (decode as any).apply(this, args);
+      result.then(() => { (window as any).releaseAudio.decoded = true; });
+      return result;
+    };
+    const create = AudioContext.prototype.createBufferSource;
+    AudioContext.prototype.createBufferSource = function () {
+      const source = create.call(this);
+      const start = source.start.bind(source);
+      const stop = source.stop.bind(source);
+      source.start = (...args) => { (window as any).releaseAudio.starts++; start(...args); };
+      source.stop = (...args) => { (window as any).releaseAudio.stops++; stop(...args); };
+      return source;
+    };
+  });
+  await page.getByRole('heading', { level: 1 }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).releaseAudio.decoded)).toBe(true);
+  await page.getByRole('button', { name: /START REGULAR/ }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).releaseAudio.starts)).toBe(1);
+  await expect(page.locator('.choice')).toHaveCount(4);
+  expect(await page.evaluate(() => (window as any).releaseAudio.stops)).toBe(0);
+  await page.getByRole('button', { name: 'Sound effects' }).click();
+  expect(await page.evaluate(() => (window as any).releaseAudio.stops)).toBe(1);
+  await page.getByRole('button', { name: 'SKIP →', exact: true }).click();
+  await page.getByRole('button', { name: 'Sound effects' }).click();
+  await page.getByRole('button', { name: /NEXT ROUND/ }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).releaseAudio.starts)).toBe(2);
+  await page.getByRole('button', { name: 'SKIP INTRO' }).click();
+  expect(await page.evaluate(() => (window as any).releaseAudio.stops)).toBe(2);
+});
+
 test('PNG fallback stays on the pixelation canvas and unavailable audio is harmless', async ({ page }) => {
   const png = await page.evaluate(() => {
     const canvas = document.createElement('canvas');

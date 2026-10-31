@@ -24,7 +24,6 @@ function App() {
   const [spriteReady, setSpriteReady] = useState(false);
   const onSpriteReady = useCallback(() => setSpriteReady(true), []);
   const completeSpawn = useCallback(() => {
-    stopSounds();
     setStage(old => old === 'spawning' ? 'playing' : old);
   }, []);
   useEffect(() => {
@@ -162,7 +161,7 @@ function App() {
           <div className="scene"><div className="sun"/><div className="mountain mountain-a"/><div className="mountain mountain-b"/><div className="grass ground"/><div className="arena"/><div className={`sprite-wrap ${stage === 'spawning' ? (spriteReady ? 'sprite-emerging' : 'sprite-waiting') : ''}`}><PixelSprite key={current.id} id={current.id} reveal={progress} clear={stage === 'reveal'} onReady={onSpriteReady}/></div>{stage === 'spawning' && <SpawnEffect ready={spriteReady} onComplete={completeSpawn}/>} <div className="scene-caption">{stage === 'reveal' ? `IT'S ${current.name.toUpperCase()}!` : stage === 'spawning' ? (spriteReady ? 'A WILD MYSTERY APPEARS!' : 'PREPARING YOUR ENCOUNTER...') : 'WHO COULD IT BE?'}</div></div>
           <div className="panel">
             {stage !== 'reveal' && <TimerBar seconds={seconds} duration={ROUND_SECONDS} waiting={stage === 'spawning'}/>}
-            {stage === 'spawning' ? <div className="spawn-panel"><span role="status">{spriteReady ? 'GET READY, TRAINER!' : 'LOADING POKÉMON...'}</span><button className="skip" disabled={!spriteReady} onClick={completeSpawn}>SKIP INTRO →</button></div> : stage === 'playing' ? <>
+            {stage === 'spawning' ? <div className="spawn-panel"><span role="status">{spriteReady ? 'GET READY, TRAINER!' : 'LOADING POKÉMON...'}</span><button className="skip" disabled={!spriteReady} onClick={() => { stopSounds(); completeSpawn(); }}>SKIP INTRO →</button></div> : stage === 'playing' ? <>
               {mode === 'regular' ? <div className="choice-grid" role="group" aria-label="Choose the Pokémon">
                 {(choices[index] ?? []).map((option, i) => <button key={option.id} type="button" className={`choice choice-${i}`} onClick={() => choose(option.id)}><span className="choice-symbol">{['◆','▲','●','■'][i]}</span><span>{option.name}</span></button>)}
               </div> : <>

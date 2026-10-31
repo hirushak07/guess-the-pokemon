@@ -145,7 +145,7 @@ test('HP timer drains through scoring tiers and stays full during spawn', async 
   await expect(page.locator('.round-timer')).toHaveClass(/tier-3/);
 });
 
-test('music is independent, stops when hidden, and remembers its preference', async ({ page }) => {
+test('music plays on home, through results and hidden tabs, and remembers mute', async ({ page }) => {
   await page.evaluate(() => {
     (window as any).musicNotes = 0;
     const create = AudioContext.prototype.createOscillator;
@@ -157,9 +157,10 @@ test('music is independent, stops when hidden, and remembers its preference', as
     };
   });
   expect(await page.evaluate(() => (window as any).musicNotes)).toBe(0);
-  await page.getByRole('button', { name: 'Sound effects' }).click();
-  await page.getByRole('button', { name: /START REGULAR/ }).click();
+  await page.getByRole('heading', { level: 1 }).click();
   await expect.poll(() => page.evaluate(() => (window as any).musicNotes)).toBeGreaterThan(0);
+  await expect(page.getByRole('button', { name: /START REGULAR/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Sound effects' }).click();
   await page.getByRole('button', { name: 'Music', exact: true }).click();
   const muted = await page.evaluate(() => (window as any).musicNotes);
   await page.waitForTimeout(600);
@@ -171,13 +172,22 @@ test('music is independent, stops when hidden, and remembers its preference', as
     document.dispatchEvent(new Event('visibilitychange'));
   });
   const hidden = await page.evaluate(() => (window as any).musicNotes);
-  await page.waitForTimeout(600);
-  expect(await page.evaluate(() => (window as any).musicNotes)).toBe(hidden);
+  await expect.poll(() => page.evaluate(() => (window as any).musicNotes)).toBeGreaterThan(hidden);
   await page.evaluate(() => {
     Object.defineProperty(document, 'hidden', { configurable: true, value: false });
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  await expect.poll(() => page.evaluate(() => (window as any).musicNotes)).toBeGreaterThan(hidden);
+  await page.getByRole('button', { name: /START REGULAR/ }).click();
+  for (let round = 0; round < 5; round++) {
+    await page.getByRole('button', { name: 'SKIP INTRO' }).click();
+    await page.getByRole('button', { name: 'SKIP →', exact: true }).click();
+    await page.getByRole('button', { name: round === 4 ? /VIEW RESULTS/ : /NEXT ROUND/ }).click();
+  }
+  const resultsNotes = await page.evaluate(() => (window as any).musicNotes);
+  await expect.poll(() => page.evaluate(() => (window as any).musicNotes)).toBeGreaterThan(resultsNotes);
+  await page.getByRole('button', { name: /CHANGE MODE/ }).click();
+  const homeNotes = await page.evaluate(() => (window as any).musicNotes);
+  await expect.poll(() => page.evaluate(() => (window as any).musicNotes)).toBeGreaterThan(homeNotes);
   await page.getByRole('button', { name: 'Music', exact: true }).click();
   await page.reload();
   await expect(page.getByRole('button', { name: 'Music', exact: true })).toHaveAttribute('aria-pressed', 'false');

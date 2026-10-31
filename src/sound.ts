@@ -49,7 +49,7 @@ function musicNote(frequency: number, time: number, duration: number, volume: nu
 }
 
 function syncMusic() {
-  if (!musicEnabled || !musicActive || document.hidden || context?.state !== 'running') {
+  if (!musicEnabled || !musicActive || context?.state !== 'running') {
     stopMusic();
     return;
   }
@@ -60,7 +60,9 @@ function syncMusic() {
     if (!context || context.state !== 'running') return;
     // Never dump missed notes on return from a throttled/background tab.
     if (nextBeat < context.currentTime) nextBeat = context.currentTime + .04;
-    while (nextBeat < context.currentTime + .15) {
+    // Buffer through ordinary background-tab timer throttling. Muting stops
+    // scheduled voices immediately, including notes that have not started.
+    while (nextBeat < context.currentTime + 1.25) {
       const note = melody[step % melody.length];
       if (note) musicNote(hz(note), nextBeat, .19, .12, 'square');
       if (step % 2 === 0) musicNote(hz(bass[Math.floor(step / 16) % 4] + (step % 4 === 2 ? 12 : 0)), nextBeat, .35, .28, 'triangle');

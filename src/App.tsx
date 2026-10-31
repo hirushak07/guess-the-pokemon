@@ -32,14 +32,20 @@ function App() {
     try { localStorage.setItem('pokepixel-sound', sound ? 'on' : 'off'); } catch { /* Storage may be blocked. */ }
   }, [sound]);
   useEffect(() => {
+    setMusicActive(true);
+    document.addEventListener('click', unlockSound);
+    document.addEventListener('keydown', unlockSound);
     document.addEventListener('visibilitychange', handleAudioVisibility);
-    return () => { document.removeEventListener('visibilitychange', handleAudioVisibility); stopAllAudio(); };
+    return () => {
+      document.removeEventListener('click', unlockSound);
+      document.removeEventListener('keydown', unlockSound);
+      document.removeEventListener('visibilitychange', handleAudioVisibility);
+      stopAllAudio();
+    };
   }, []);
   const [mode, setMode] = useState<Mode>('regular');
   const [choices, setChoices] = useState<Pokemon[][]>([]);
   const [stage, setStage] = useState<Stage>('home');
-  const musicActive = stage === 'spawning' || stage === 'playing' || stage === 'reveal';
-  useEffect(() => { setMusicActive(musicActive); return () => setMusicActive(false); }, [musicActive]);
   const lastTick = useRef(0);
   const lastTier = useRef(3);
   const [rounds, setRounds] = useState<Pokemon[]>([]);

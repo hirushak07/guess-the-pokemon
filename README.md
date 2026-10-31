@@ -7,7 +7,21 @@ A retro-inspired, five-round Pokémon identification browser game built with **R
 - **Regular:** Four colored Kahoot-style multiple-choice buttons. One selection per round. A wrong choice immediately reveals the answer.
 - **Hard:** Type a Pokémon name (with suggestion buttons), and keep guessing until the round ends or you are correct.
 
-Each game chooses five distinct Pokémon. Sprites start pixelated and become clearer over a 20-second timer; correct guesses earn 1–3 points depending on remaining time. Both modes use the same final score screen.
+Each game chooses five distinct Pokémon. Sprites start pixelated and become clearer over a 10-second timer; correct guesses earn 1–3 points depending on remaining time. Both modes use the same final score screen.
+
+## Spawn and sound
+
+Each round loads its sprite, then plays a 1.6-second ball arrival, opening flash, and Pokémon emergence. The guessing timer and controls start only after the intro finishes (or **Skip intro** is selected). Reduced-motion preferences bypass the animated intro and flash. GIF frames keep moving throughout emergence and the existing progressive pixelation is preserved. The static PNG fallback now uses that same canvas pixelation; failed assets display a message instead of blocking the game. Each asset request has an eight-second timeout.
+
+**Sound on/off** remembers the player's choice when browser storage is available. Web Audio supplies original synthesized cues plus the requested Gen 3 throw/release and Zedge success recordings, with short envelopes and modest output gain. Audio starts only after a player interaction; unsupported or blocked audio does not prevent gameplay. Muting or skipping the intro cancels its pending sounds.
+
+The throw and release are the Gen 3 samples from the linked Soundeffects Wiki pages; success uses the linked Zedge “Pokemon A Button” clip. These third-party recordings are documented in [asset attribution](src/assets/ATTRIBUTION.md), and are not represented as openly licensed. All other effects and music are original synthesis. The throw starts 200 ms before the ball enters, the release plays at the opening flash (760 ms), and success plays on a correct answer. The first intro gives audio decoding up to 500 ms; loading failures use synthesized fallbacks without stalling gameplay. The ball, flash, ring, and particles are drawn in CSS for this project; no video frames or game assets were extracted. Pokémon/Poké Ball designs and the existing remote sprites remain subject to their respective owners' rights. The supplied reference clip informs the arrival/opening/emergence and HP-style timer; no media from the clip is bundled.
+
+## Music and HP timer
+
+The reference-inspired HP timer has two dividers at the scoring boundaries (35% and 70% remaining), leaving the 2-point section uninterrupted. It drains from green (3 points) to yellow (2 points) to red (1 point). Its labels share the exact scoring thresholds: more than 70% remaining earns 3 points, more than 35% earns 2, otherwise 1. It stays full until the spawn intro ends and resets every round.
+
+An original eight-bar, 120 BPM chiptune loop adds pulse melody, triangle bass, and a soft synthesized kick while the site is open, including the home screen and results. Playback begins after the first click or keypress because browsers restrict autoplay. Music and sound effects have independent, remembered toggles. The music scheduler uses the Web Audio clock, continues across screens and background tabs, and avoids playing a backlog if the browser suspends the page. Closing the page or switching music off stops playback. Effects include selection, point-tier changes, final-three-second ticks, skipping, and a distinct timeout cue. Music has its own quiet channel, so effects cannot accidentally stop or restart the loop.
 
 ## Animated sprites
 
@@ -39,6 +53,20 @@ npm run preview
 - `src/pokemon.ts` — Pokémon pool, sprite URL providers, random selections
 - `src/PixelSprite.tsx` — animated canvas sampling and reveal
 - `src/style.css` — arcade-inspired styling and responsive layout
+- `src/SpawnEffect.tsx` — cancellable intro timing and decorative effect
+- `src/sound.ts` — release recording playback, synthesized cues, music scheduler, and independent audio controls
+- `src/TimerBar.tsx` — HP countdown and shared scoring thresholds
+
+## Browser checks
+
+```bash
+npm ci
+npx playwright install chromium
+npm test
+npm run build
+```
+
+For an already installed Edge browser, set `PLAYWRIGHT_CHANNEL=msedge` (PowerShell: `$env:PLAYWRIGHT_CHANNEL='msedge'`) before running tests. Tests use an original two-frame GIF fixture and cover loading/intro timing, moving frames, progressive pixelation, five-round replay, hard-mode timeout/focus, mobile layout, mute persistence, audio cues, fallback rendering, HP timer thresholds/reset, independent music controls, home/results/background playback, and music preference persistence. For visual/audio review, also play both modes with real sprites, toggle sound during release, and enable the operating system's reduced-motion setting.
 
 ## Notes
 

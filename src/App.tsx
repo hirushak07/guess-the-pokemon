@@ -5,6 +5,13 @@ import { playSound, setSoundEnabled, stopSounds, unlockSound, setMusicEnabled, s
 import { PixelSprite } from './PixelSprite';
 import { POKEMON, pickRounds, pickOptions, normalizeGuess, type Pokemon } from './pokemon';
 
+import {
+  Show,
+  SignInButton,
+  SignUpButton,
+  UserButton,
+} from '@clerk/react';
+
 const ROUND_SECONDS = 10;
 type Mode = 'regular' | 'hard';
 type Stage = 'home' | 'spawning' | 'playing' | 'reveal' | 'finished';
@@ -149,7 +156,29 @@ function App() {
 
   return <div className="site">
     <div className="stars" aria-hidden="true"/>
-    <header className="topbar"><span className="brand-dot"/> <span>POKÉPIXEL</span><span className="top-right">A PIXEL GUESSING GAME <span className="live-dot"/></span></header>
+    
+    <header className="topbar">
+      <span className="brand-dot" />
+      <span>POKÉPIXEL</span>
+      
+      <div className="auth-controls">
+        <Show when="signed-out">
+          <SignInButton mode="modal">
+            <button type="button">LOG IN</button>
+          </SignInButton>
+
+          <SignUpButton mode="modal">
+            <button type="button">SIGN UP</button>
+          </SignUpButton>
+        </Show>
+
+        <Show when="signed-in">
+          <UserButton />
+        </Show>
+      </div>
+
+    </header>
+
     <main className="layout">
       <section className="heading">
         <div className="eyebrow">✦ THE ULTIMATE TRAINER TEST ✦</div>

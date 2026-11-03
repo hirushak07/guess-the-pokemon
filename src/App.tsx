@@ -1,3 +1,4 @@
+import { PlayerProfile } from './PlayerProfile';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TimerBar, pointsForTime } from './TimerBar';
 import { SpawnEffect } from './SpawnEffect';
@@ -178,6 +179,8 @@ function App() {
       </div>
 
     </header>
+
+    <PlayerProfile />
 
     <main className="layout">
       <section className="heading">

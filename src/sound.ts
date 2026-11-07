@@ -1,5 +1,5 @@
 // Original synthesized arcade cues plus the three attributed recordings.
-type Cue = 'throw' | 'land' | 'release' | 'correct' | 'incorrect' | 'complete' | 'select' | 'tick' | 'tier' | 'timeout' | 'skip';
+type Cue = 'throw' | 'land' | 'release' | 'correct' | 'incorrect' | 'complete' | 'select' | 'tick' | 'timeout' | 'skip';
 let context: AudioContext | undefined;
 let master: GainNode | undefined;
 let enabled = true;
@@ -146,7 +146,6 @@ export function playSound(cue: Cue) {
     throw: [[180, 960, 0, .25], [960, 320, .18, .25]],
     select: [[740, 990, 0, .065]],
     tick: [[880, 660, 0, .07]],
-    tier: [[660, 440, 0, .09], [440, 330, .09, .1]],
     timeout: [[330, 220, 0, .17], [220, 110, .18, .3], [110, 55, .42, .22]],
     skip: [[440, 220, 0, .12]],
     land: [[130, 55, 0, .14]],

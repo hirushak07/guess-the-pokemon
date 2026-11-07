@@ -10,6 +10,7 @@ const gif = Buffer.from([
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/*.gif', route => route.fulfill({ contentType: 'image/gif', body: gif }));
+  await page.route('https://fonts.googleapis.com/**', route => route.abort());
   await page.goto('/');
 });
 
@@ -128,31 +129,114 @@ test('original audio starts after interaction, mute stops it, and correct guesse
   expect(await page.evaluate(() => (window as any).sounds.started)).toBe(starts);
   await page.getByRole('button', { name: 'Sound effects' }).click();
   await page.locator('.choice').filter({ hasText: POKEMON.find(p => p.id === id)!.name }).click();
-  await expect(page.locator('.reveal-panel')).toContainText('+3 POINTS');
-  await expect(page.locator('.status')).toContainText('SCORE 03');
+  await expect(page.locator('.reveal-panel')).toContainText(/\+[\d,]+ POINTS/);
+  const awarded = (await page.locator('.reveal-panel p').innerText()).match(/[\d,]+/)![0];
+  expect(Number(awarded.replaceAll(',', ''))).toBeGreaterThan(0);
+  await expect(page.locator('.status')).toContainText(`SCORE ${awarded}`);
   expect(await page.evaluate(() => (window as any).sounds.started)).toBeGreaterThan(starts);
 });
 
-test('HP timer drains through scoring tiers and stays full during spawn', async ({ page }) => {
+test('live points drain, submissions use exact elapsed time, and each round resets', async ({ page }) => {
   await page.clock.install();
+  let id = 0;
+  await page.route('**/*.gif', route => {
+    id = Number(route.request().url().match(/(\d+)\.gif/)![1]);
+    return route.fulfill({ contentType: 'image/gif', body: gif });
+  });
   await page.getByRole('button', { name: /START REGULAR/ }).click();
-  await expect(page.getByRole('progressbar', { name: 'Time remaining' })).toHaveAttribute('aria-valuenow', '10');
-  await expect(page.locator('.timer-points')).toContainText('3 PTS.');
-  await page.getByRole('button', { name: 'SKIP INTRO' }).click();
-  await page.clock.runFor(3100);
-  await expect(page.locator('.round-timer')).toHaveClass(/tier-2/);
-  await expect(page.locator('.timer-points')).toContainText('2 PTS.');
-  await page.clock.runFor(3500);
-  await expect(page.locator('.round-timer')).toHaveClass(/tier-1/);
-  await expect(page.locator('.timer-points')).toContainText('1 PT.');
-  const scale = await page.locator('.hp-fill').evaluate(el => getComputedStyle(el).transform);
-  expect(Number(scale.match(/matrix\(([^,]+)/)![1])).toBeLessThan(.36);
-  await page.clock.runFor(3500);
-  await expect(page.locator('.reveal-panel')).toBeVisible();
-  await page.getByRole('button', { name: /NEXT ROUND/ }).click();
-  await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');
-  await expect(page.locator('.round-timer')).toHaveClass(/tier-3/);
+  const bar = page.getByRole('progressbar', { name: 'Time remaining' });
+  const points = page.locator('.timer-points b');
+  const skipIntro = page.getByRole('button', { name: 'SKIP INTRO' });
+  const next = page.getByRole('button', { name: /NEXT ROUND/ });
+  const answer = () => page.getByRole('button', { name: POKEMON.find(p => p.id === id)!.name });
+  await expect(skipIntro).toBeEnabled();
+  await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + 200));
+  await expect(bar).toHaveAttribute('aria-valuenow', '10');
+  await expect(points).toHaveText('1,000');
+
+  await skipIntro.dispatchEvent('click');
+  await page.clock.runFor(1250);
+  await expect(points).toHaveText('875');
+  await answer().dispatchEvent('click');
+  await expect(page.locator('.reveal-panel')).toContainText('+875 POINTS');
+
+  await next.dispatchEvent('click');
+  await expect(skipIntro).toBeEnabled();
+  await expect(bar).toHaveAttribute('aria-valuenow', '10');
+  await skipIntro.dispatchEvent('click');
+  await page.clock.runFor(6750);
+  await expect(points).toHaveText('325');
+  await answer().dispatchEvent('click');
+  await expect(page.locator('.reveal-panel')).toContainText('+325 POINTS');
+  await expect(page.locator('.status')).toContainText('SCORE 1,200');
+
+  await next.dispatchEvent('click');
+  await expect(skipIntro).toBeEnabled();
+  await skipIntro.dispatchEvent('click');
+  // Move the submission clock beyond the deadline without running the interval.
+  await answer().evaluate(button => {
+    const now = performance.now.bind(performance);
+    performance.now = () => now() + 10_001;
+    (button as HTMLButtonElement).click();
+  });
+  await expect(page.locator('.reveal-panel')).toContainText('TIME UP');
+  await expect(page.locator('.status')).toContainText('SCORE 1,200');
 });
+
+for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }]) {
+  test.describe(`touch at ${viewport.width}×${viewport.height}`, () => {
+    test.use({ viewport, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
+
+    test('Regular choices fit and register a tap', async ({ page }) => {
+      await page.getByRole('button', { name: /START REGULAR/ }).tap();
+      const choices = page.locator('.choice');
+      await expect(choices).toHaveCount(4);
+      for (const choice of await choices.all()) {
+        await expect(choice).toBeInViewport({ ratio: 1 });
+        expect((await choice.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        expect(await choice.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
+      await choices.first().tap();
+      await expect(page.locator('.reveal-panel')).toBeVisible();
+    });
+
+    test('Hard waits for a typing tap, then supports keyboard submission and retry', async ({ page }) => {
+      let id = 0;
+      await page.route('**/*.gif', route => {
+        id = Number(route.request().url().match(/(\d+)\.gif/)![1]);
+        return route.fulfill({ contentType: 'image/gif', body: gif });
+      });
+      await page.getByRole('button', { name: /HARD TYPE/ }).tap();
+      await page.getByRole('button', { name: /START HARD/ }).tap();
+      const startTyping = page.getByRole('button', { name: /TAP TO TYPE/ });
+      const input = page.getByRole('textbox', { name: 'YOUR GUESS' });
+      await expect(startTyping).toBeVisible();
+      await expect(input).toHaveCount(0);
+      await page.waitForTimeout(1050);
+      await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');
+      await startTyping.tap();
+      await expect(input).toBeFocused();
+      await expect(input).toHaveAttribute('enterkeyhint', 'go');
+      // Emulate a shorter viewport with the software keyboard open.
+      await page.setViewportSize({ width: viewport.width, height: 350 });
+      await expect(input).toBeInViewport({ ratio: 1 });
+      await input.fill('not-a-pokemon');
+      await input.press('Enter');
+      await expect(page.getByText('Not quite! Try again.')).toBeVisible();
+      await expect(input).toBeFocused();
+      await expect(input).toHaveValue('');
+      await input.fill(POKEMON.find(p => p.id === id)!.name);
+      await input.press('Enter');
+      await expect(page.locator('.reveal-panel')).toContainText('CORRECT ANSWER');
+      await expect(input).toHaveCount(0);
+      await page.setViewportSize(viewport);
+      await page.getByRole('button', { name: /NEXT ROUND/ }).tap();
+      await expect(startTyping).toBeVisible();
+      await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');
+    });
+  });
+}
 
 test('music plays on home, through results and hidden tabs, and remembers mute', async ({ page }) => {
   await page.evaluate(() => {

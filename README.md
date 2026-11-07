@@ -80,3 +80,17 @@ For an already installed Edge browser, set `PLAYWRIGHT_CHANNEL=msedge` (PowerShe
 ## Notes
 
 This is a fan-made educational prototype. Pokémon characters and imagery are the intellectual property of their respective owners; public distribution, branding, and commercialization require reviewing applicable rights and permissions. Images are loaded remotely, so gameplay needs internet access. No affiliation with Nintendo, Game Freak, The Pokémon Company, PokéAPI, or Smogon is implied.
+
+## Verified game results backend
+
+The Supabase migration adds an authenticated `play_verified_game` RPC and an owner-only `game_results` table. The database selects the five rounds, sets each 10-second deadline, checks guesses, and saves the result when round five resolves. Use the existing Clerk third-party auth configuration. Apply the migration to a local or staging database before connecting the game UI.
+
+Call the RPC with the signed-in player's Supabase client. `start` takes `p_mode` (`regular` or `hard`) and resumes an unfinished run in that mode when one exists. `open`, `guess`, `skip`, and `next` take the returned `p_run_id` and expected `p_round`. `status` takes the run ID and returns the current round. Send Regular choices as ID strings and Hard guesses as names. The deadline starts on `open`, which also reveals the sprite ID and any choices. Use the returned deadline and server time for display. A completed response contains the verified total and all five round results. Runs expire after 30 minutes if unfinished.
+
+The migration is a backend foundation. The current game screen still plays locally. Sprite IDs are visible during play and can be mapped to Pokémon names, so these results are suitable for verifying scoring rules and need additional abuse controls before competitive ranking.
+
+Run the database integration test against a local Supabase database after applying the migration:
+
+```sh
+psql "$LOCAL_SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/verified_game_results.sql
+```

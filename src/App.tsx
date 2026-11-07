@@ -1,3 +1,4 @@
+import { VerifiedGame } from './VerifiedGame';
 import { PlayerProfile } from './PlayerProfile';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
@@ -13,6 +14,7 @@ import {
   SignInButton,
   SignUpButton,
   UserButton,
+  useUser,
 } from '@clerk/react';
 
 type Mode = 'regular' | 'hard';
@@ -25,6 +27,12 @@ const resultLabels: Record<RoundResult, string> = {
 };
 
 function App() {
+  const { user, isSignedIn } = useUser();
+  const [verifiedPlayer, setVerifiedPlayer] = useState<string | null>(null);
+  const verified = Boolean(isSignedIn && user && verifiedPlayer === user.id);
+  useEffect(() => {
+    if (!isSignedIn || verifiedPlayer !== user?.id) setVerifiedPlayer(null);
+  }, [isSignedIn, user?.id, verifiedPlayer]);
   const [sound, setSound] = useState(() => {
     try { return localStorage.getItem('pokepixel-sound') !== 'off'; } catch { return true; }
   });
@@ -102,6 +110,12 @@ function App() {
   }
 
   function start() {
+    if (isSignedIn && user) {
+      unlockSound();
+      setStage('home');
+      setVerifiedPlayer(user.id);
+      return;
+    }
     setAudioReady(false);
     // Give the first throw a chance to decode, without letting failed audio
     // stall the game. Later rounds reuse the decoded buffers.
@@ -233,7 +247,8 @@ function App() {
       </section>
       <section className="game-shell">
         <div className="shell-head"><div>◈ POKÉPIXEL <span> / ARCADE</span></div><div className="audio-controls"><button className="sound-toggle" aria-pressed={sound} aria-label="Sound effects" onClick={() => { const value = !sound; setSoundEnabled(value); if (value) unlockSound(); setSound(value); }}>SOUND {sound ? 'ON ♪' : 'OFF'}</button><button className="sound-toggle" aria-pressed={music} aria-label="Music" onClick={() => { const value = !music; setMusicEnabled(value); if (value) unlockSound(); setMusic(value); }}>MUSIC {music ? 'ON ♫' : 'OFF'}</button></div></div>
-        {stage === 'home' && <div className="home-screen">
+        {verified && <VerifiedGame key={verifiedPlayer} mode={mode} onExit={() => setVerifiedPlayer(null)}/>}
+        {!verified && stage === 'home' && <div className="home-screen">
           <div className="scene home-scene"><div className="sun"/><div className="mountain mountain-a"/><div className="mountain mountain-b"/><div className="grass ground"/><div className="arena"/><div className="question">?</div><div className="scene-caption">A NEW CHALLENGE AWAITS...</div></div>
           <div className="panel home-panel"><div className="micro">READY, TRAINER?</div><h2>TEST YOUR POKÉMON KNOWLEDGE!</h2><p>GUESS {ROUND_COUNT} RANDOM POKÉMON AS THEIR SPRITES COME INTO FOCUS. CORRECT GUESSES EARN UP TO {ROUND_MAX_POINTS.toLocaleString()} POINTS. GUESS FASTER TO SCORE MORE!</p><div className="features"><span>◷ {ROUND_SECONDS} SEC / ROUND</span><span>★ {GAME_MAX_POINTS.toLocaleString()} MAX POINTS</span><span>◈ GEN 5 ANIMATIONS</span></div><div className="mode-picker" role="group" aria-label="Choose a game mode"><button className={mode === 'regular' ? 'mode-option selected' : 'mode-option'} onClick={() => { unlockSound(); playSound('select'); setMode('regular'); }} aria-pressed={mode === 'regular'}><strong>⚡ REGULAR</strong><span>4 CHOICES · KAHOOT STYLE</span></button><button className={mode === 'hard' ? 'mode-option selected' : 'mode-option'} onClick={() => { unlockSound(); playSound('select'); setMode('hard'); }} aria-pressed={mode === 'hard'}><strong>★ HARD</strong><span>TYPE THE NAME YOURSELF</span></button></div><button className="primary" onClick={start}>▶ START {mode.toUpperCase()} CHALLENGE</button></div>
         </div>}

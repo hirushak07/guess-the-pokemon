@@ -27,6 +27,7 @@ begin
   assert v_state ->> 'deadline' is null and v_state ->> 'answer' is null;
   assert v_state ->> 'spriteId' is null and v_state ->> 'choices' is null;
   assert (public.play_verified_game('start', 'regular') ->> 'runId')::uuid = v_id;
+  assert public.play_verified_game('start', 'hard') ->> 'mode' = 'regular';
   assert (public.play_verified_game('guess', null, v_id, 1, '25') ->> 'outcome') is null;
   begin
     perform 1 from game_private.rounds;

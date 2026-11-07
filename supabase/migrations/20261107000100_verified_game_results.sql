@@ -258,8 +258,6 @@ begin
         select id, row_number() over () as number
         from (select id from game_private.pokemon order by random() limit 5) picked
       ) answers;
-    elsif v_run.mode <> p_mode then
-      raise exception 'Resume your active game in its original mode' using errcode = '22023';
     end if;
   else
     if p_action is null or p_action not in ('open', 'guess', 'skip', 'next', 'status') then

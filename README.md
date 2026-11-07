@@ -83,7 +83,7 @@ This is a fan-made educational prototype. Pokémon characters and imagery are th
 
 ## Verified game results backend
 
-The Supabase migration adds an authenticated `play_verified_game` RPC and an owner-only `game_results` table. The database selects the five rounds, sets each 10-second deadline, checks guesses, and saves the result when round five resolves. Use the existing Clerk third-party auth configuration. Apply the migration to a local or staging database before connecting the game UI.
+The Supabase migration adds an authenticated `play_verified_game` RPC and an owner-only `verified_game_results` table alongside any existing `game_results` table. The database selects the five rounds, sets each 10-second deadline, checks guesses, and saves the result when round five resolves. Use the existing Clerk third-party auth configuration. Apply the migration to a local or staging database before connecting the game UI.
 
 Call the RPC with the signed-in player's Supabase client. `start` takes `p_mode` (`regular` or `hard`) and resumes an unfinished run in that mode when one exists. `open`, `guess`, `skip`, and `next` take the returned `p_run_id` and expected `p_round`. `status` takes the run ID and returns the current round. Send Regular choices as ID strings and Hard guesses as names. The deadline starts on `open`, which also reveals the sprite ID and any choices. Use the returned deadline and server time for display. A completed response contains the verified total and all five round results. Runs expire after 30 minutes if unfinished.
 

@@ -9,7 +9,7 @@ declare
   v_answer text;
   v_choice text;
   v_deadline text;
-  v_points integer;
+  v_first_round_points integer;
   v_count integer;
 begin
   set local role anon;
@@ -52,9 +52,9 @@ begin
   set local role authenticated;
   v_state := public.play_verified_game('guess', null, v_id, 1, v_state ->> 'spriteId');
   assert v_state ->> 'outcome' = 'correct';
-  v_points := (v_state ->> 'roundPoints')::integer;
-  assert v_points between 600 and 700;
-  assert (public.play_verified_game('skip', null, v_id, 1) ->> 'score')::integer = v_points;
+  v_first_round_points := (v_state ->> 'roundPoints')::integer;
+  assert v_first_round_points between 600 and 700;
+  assert (public.play_verified_game('skip', null, v_id, 1) ->> 'score')::integer = v_first_round_points;
 
   for round in 2..5 loop
     v_state := public.play_verified_game('next', null, v_id, round - 1);
@@ -84,17 +84,17 @@ begin
   assert jsonb_array_length(v_state -> 'results') = 5;
   assert (select count(distinct result ->> 'answer') from jsonb_array_elements(v_state -> 'results') result) = 5;
   assert (public.play_verified_game('skip', null, v_id, 5) ->> 'completed')::boolean;
-  select count(*) into v_count from public.game_results where run_id = v_id;
+  select count(*) into v_count from public.verified_game_results where run_id = v_id;
   assert v_count = 1;
-  assert exists (select 1 from public.game_results where run_id = v_id and score = v_points and correct_count = 1);
+  assert exists (select 1 from public.verified_game_results where run_id = v_id and score = v_first_round_points and correct_count = 1);
   begin
-    update public.game_results set score = 5000 where run_id = v_id;
+    update public.verified_game_results set score = 5000 where run_id = v_id;
     raise exception 'Direct score edit unexpectedly succeeded';
   exception when insufficient_privilege then null;
   end;
 
   perform set_config('request.jwt.claims', '{"sub":"user_test_other","role":"authenticated"}', true);
-  assert not exists (select 1 from public.game_results where run_id = v_id);
+  assert not exists (select 1 from public.verified_game_results where run_id = v_id);
   begin
     perform public.play_verified_game('status', null, v_id);
     raise exception 'Another player unexpectedly accessed the run';

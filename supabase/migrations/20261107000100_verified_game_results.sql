@@ -176,7 +176,7 @@ create table game_private.rounds (
   unique (run_id, pokemon_id)
 );
 
-create table public.game_results (
+create table public.verified_game_results (
   run_id uuid primary key references game_private.runs,
   player_id text not null,
   mode text not null check (mode in ('regular', 'hard')),
@@ -186,13 +186,13 @@ create table public.game_results (
   completed_at timestamptz not null
 );
 
-create index game_results_player_completed
-  on public.game_results (player_id, completed_at desc);
+create index verified_game_results_player_completed
+  on public.verified_game_results (player_id, completed_at desc);
 
-alter table public.game_results enable row level security;
-revoke all on public.game_results from public, anon, authenticated;
-grant select on public.game_results to authenticated;
-create policy read_own_game_results on public.game_results
+alter table public.verified_game_results enable row level security;
+revoke all on public.verified_game_results from public, anon, authenticated;
+grant select on public.verified_game_results to authenticated;
+create policy read_own_verified_game_results on public.verified_game_results
   for select to authenticated using (player_id = (select auth.jwt() ->> 'sub'));
 
 -- Every mutation uses the authenticated subject and the locked run row.
@@ -325,7 +325,7 @@ begin
 
   if v_outcome is not null and v_round.number = 5 then
     update game_private.runs set completed_at = v_now where id = v_run.id returning * into v_run;
-    insert into public.game_results (run_id, player_id, mode, score, correct_count, scoring_version, completed_at)
+    insert into public.verified_game_results (run_id, player_id, mode, score, correct_count, scoring_version, completed_at)
       values (v_run.id, v_player, v_run.mode, v_score, v_correct, 1, v_run.completed_at);
   end if;
 

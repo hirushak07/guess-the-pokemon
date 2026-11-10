@@ -123,3 +123,5 @@ button:focus-visible{outline:3px solid #e9a83d;outline-offset:4px}
 @media(hover:none){
   .choice:hover,.primary:hover{transform:none}
 }
+
+.verified-guess{margin-top:12px}

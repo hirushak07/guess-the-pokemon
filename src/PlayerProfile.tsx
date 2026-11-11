@@ -1,44 +1,35 @@
-
 import { useEffect, useState } from 'react';
 import { useUser } from '@clerk/react';
 import { useSupabase } from './useSupabase';
 
+type SyncResult = { status: 'saved' | 'username_taken' | 'username_invalid'; username: string | null };
+
+// Keeps the player's Supabase profile in step with Clerk through the sync_profile RPC, which
+// always creates the row and decides on the server whether the username can be used.
+// Verified scores never depend on it, so problems are reported quietly instead of blocking play.
 export function PlayerProfile() {
   const { isLoaded, isSignedIn, user } = useUser();
   const supabase = useSupabase();
-  const [status, setStatus] = useState('');
+  const [problem, setProblem] = useState('');
+  const id = isSignedIn ? user?.id : undefined;
+  const username = isSignedIn ? user?.username ?? null : null;
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || !user) return;
-
+    setProblem('');
+    if (!isLoaded || !id) return;
     let cancelled = false;
-
-    async function syncProfile() {
-      const { error } = await supabase
-        .from('profiles')
-        .upsert(
-          {
-            id: user!.id,
-            username: user!.username,
-          },
-          { onConflict: 'id' }
-        );
-
-      if (!cancelled) {
-        setStatus(
-          error ? `Profile sync failed: ${error.message}` : 'Profile saved!'
-        );
+    void supabase.rpc('sync_profile', { p_username: username }).then(({ data, error }) => {
+      if (cancelled) return;
+      const result = data as SyncResult | null;
+      if (error || result?.status !== 'saved') {
+        console.warn('Profile sync incomplete:', error ?? result);
+        setProblem(error
+          ? 'COULDN’T SYNC YOUR PROFILE. YOUR SCORES STILL SAVE.'
+          : 'YOUR USERNAME ISN’T ON YOUR PROFILE YET. YOUR SCORES STILL SAVE.');
       }
-    }
+    });
+    return () => { cancelled = true; };
+  }, [isLoaded, id, username, supabase]);
 
-    void syncProfile();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoaded, isSignedIn, user?.id, user?.username, supabase]);
-
-  if (!isSignedIn) return null;
-
-  return <div className="profile-status">{status}</div>;
+  return problem ? <div className="profile-status" role="status">{problem}</div> : null;
 }

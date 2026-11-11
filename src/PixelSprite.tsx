@@ -12,6 +12,29 @@ const MIN_RESOLUTION = 8;
 // Larger values keep pixels chunkier until later in the round.
 const PIXEL_REVEAL_POWER = 2.2;
 const MAX_RESOLUTION = 220;
+const LOAD_TIMEOUT = 8000;
+
+// One download per sprite, shared by the round that shows it and by prefetchSprite, which starts the
+// next round's download while the current round plays. Failed downloads are forgotten so a later
+// round can try again.
+const spriteBytes = new Map<number, Promise<ArrayBuffer>>();
+
+function loadSpriteBytes(id: number) {
+  let request = spriteBytes.get(id);
+  if (!request) {
+    request = fetch(spriteUrl(id), { signal: AbortSignal.timeout(LOAD_TIMEOUT) }).then(response => {
+      if (!response.ok) throw new Error(`Sprite HTTP ${response.status}`);
+      return response.arrayBuffer();
+    });
+    spriteBytes.set(id, request);
+    request.catch(() => spriteBytes.delete(id));
+  }
+  return request;
+}
+
+export function prefetchSprite(id: number) {
+  void loadSpriteBytes(id).catch(() => {});
+}
 
 function decodeFrames(buffer: ArrayBuffer): AnimationFrame[] {
   const gif = parseGIF(buffer);
@@ -94,6 +117,8 @@ export function PixelSprite({ id, reveal, clear = false, onReady }: Props) {
     let animation: AnimationFrame[] = [];
     let currentFrame = 0;
     let frameDeadline = 0;
+    let drawnFrame = -1;
+    let drawnResolution = 0;
 
     const output = canvasRef.current;
     const outputCtx = output?.getContext('2d');
@@ -108,6 +133,10 @@ export function PixelSprite({ id, reveal, clear = false, onReady }: Props) {
         MIN_RESOLUTION + Math.pow(amount, PIXEL_REVEAL_POWER) *
           (MAX_RESOLUTION - MIN_RESOLUTION)
       );
+      // Most animation ticks change neither the GIF frame nor the pixel size; skip those redraws.
+      if (currentFrame === drawnFrame && resolution === drawnResolution) return;
+      drawnFrame = currentFrame;
+      drawnResolution = resolution;
       if (small.width !== resolution || small.height !== resolution) {
         small.width = resolution;
         small.height = resolution;
@@ -140,16 +169,24 @@ export function PixelSprite({ id, reveal, clear = false, onReady }: Props) {
     }
 
     async function load() {
-      for (const url of [spriteUrl(id), fallbackSpriteUrl(id)]) {
+      const sources = [
+        { url: spriteUrl(id), bytes: () => loadSpriteBytes(id) },
+        { url: fallbackSpriteUrl(id), bytes: async () => {
+          const response = await fetch(fallbackSpriteUrl(id), { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(LOAD_TIMEOUT)]) });
+          if (!response.ok) throw new Error(`Sprite HTTP ${response.status}`);
+          return response.arrayBuffer();
+        } },
+      ];
+      for (const { url, bytes } of sources) {
         if (cancelled) return;
         try {
-          const response = await fetch(url, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) });
-          if (!response.ok) throw new Error(`Sprite HTTP ${response.status}`);
-          const decoded = decodeFrames(await response.arrayBuffer());
+          const buffer = await bytes();
           if (cancelled) return;
+          const decoded = decodeFrames(buffer);
           animation = decoded;
           currentFrame = 0;
           frameDeadline = 0;
+          drawnFrame = -1;
           draw();
           readyRef.current?.();
           raf = requestAnimationFrame(tick);
@@ -162,7 +199,7 @@ export function PixelSprite({ id, reveal, clear = false, onReady }: Props) {
       // Keep the PNG fallback pixelated too; never expose a clear answer early.
       try {
         const response = await fetch(staticSpriteUrl(id), {
-          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]),
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(LOAD_TIMEOUT)]),
         });
         if (!response.ok) throw new Error('Static sprite unavailable');
         const bitmap = await createImageBitmap(await response.blob());
@@ -173,6 +210,7 @@ export function PixelSprite({ id, reveal, clear = false, onReady }: Props) {
         frame.getContext('2d')!.drawImage(bitmap, 0, 0);
         bitmap.close();
         animation = [{ canvas: frame, duration: 100 }];
+        drawnFrame = -1;
         draw();
         readyRef.current?.();
         raf = requestAnimationFrame(tick);

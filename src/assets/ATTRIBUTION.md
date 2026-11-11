@@ -1,6 +1,6 @@
 # Requested Pokemon recordings
 
-These files were selected by the user for this fan game. All three downloads are preserved without pitch, tempo, or sample edits.
+These files were selected by the user for this fan game. All three downloads are preserved without pitch, tempo, or sample edits. On 2026-11-11 the two WAVs were mixed from near-identical stereo channels to mono (same 44.1 kHz, 16-bit samples and length), which halves their size.
 
 | Bundled file | Source and identification |
 | --- | --- |

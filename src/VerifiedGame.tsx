@@ -5,6 +5,7 @@ import { TimerBar } from './TimerBar';
 import { normalizeGuess, POKEMON } from './pokemon';
 import { GAME_MAX_POINTS, ROUND_COUNT, ROUND_SECONDS } from './scoring';
 import { playSound } from './sound';
+import { SpawnEffect } from './SpawnEffect';
 
 type Mode = 'regular' | 'hard';
 type Outcome = 'correct' | 'incorrect' | 'skipped' | 'timeout';
@@ -29,6 +30,8 @@ type Snapshot = {
   results: RoundResult[] | null;
 };
 
+const noop = () => {};
+
 const labels: Record<Outcome, string> = {
   correct: '★ CORRECT ANSWER!', incorrect: '✕ INCORRECT ANSWER',
   skipped: '↪ ROUND SKIPPED', timeout: '◷ TIME UP',
@@ -45,6 +48,10 @@ export function VerifiedGame({ mode, onExit }: { mode: Mode; onExit: () => void 
   const [showResults, setShowResults] = useState(false);
   const inFlight = useRef<AbortController | null>(null);
   const deadline = useRef(0);
+  // The server sets each deadline 1.6 s past the 10 s answer window; that extra time is the Poké Ball intro.
+  const introEnds = useRef(0);
+  const [intro, setIntro] = useState(false);
+  const lastTick = useRef(0);
   const input = useRef<HTMLInputElement>(null);
   const status = useRef<HTMLDivElement>(null);
 
@@ -61,8 +68,12 @@ export function VerifiedGame({ mode, onExit }: { mode: Mode; onExit: () => void 
       const next = data as Snapshot;
       const remaining = next.deadline
         ? Math.max(0, Date.parse(next.deadline) - Date.parse(next.serverTime)) : ROUND_SECONDS * 1000;
-      deadline.current = performance.now() + remaining;
-      setSeconds(remaining / 1000);
+      const introMs = next.deadline && !next.outcome ? Math.max(0, remaining - ROUND_SECONDS * 1000) : 0;
+      const now = performance.now();
+      deadline.current = now + remaining;
+      introEnds.current = now + introMs;
+      setIntro(introMs > 0);
+      setSeconds(Math.min(ROUND_SECONDS, remaining / 1000));
       setGame(next);
       if (request.p_action !== 'open') setGuess('');
       setNotice(next.feedback === 'try_again' ? 'Not quite! Try again.' : '');
@@ -91,13 +102,23 @@ export function VerifiedGame({ mode, onExit }: { mode: Mode; onExit: () => void 
   const runId = game?.runId;
   const round = game?.round;
   const playing = Boolean(game?.deadline && !game.outcome);
+  const answering = playing && !intro;
   useEffect(() => {
     if (!playing) return;
     const timer = window.setInterval(() => {
-      setSeconds(Math.max(0, (deadline.current - performance.now()) / 1000));
+      const now = performance.now();
+      setSeconds(Math.min(ROUND_SECONDS, Math.max(0, (deadline.current - now) / 1000)));
+      if (now >= introEnds.current) setIntro(false);
     }, 50);
     return () => window.clearInterval(timer);
   }, [playing]);
+
+  useEffect(() => { lastTick.current = 0; }, [round]);
+  useEffect(() => {
+    if (!answering || seconds <= 0) return;
+    const tick = Math.ceil(seconds);
+    if (tick <= 3 && tick !== lastTick.current) { playSound('tick'); lastTick.current = tick; }
+  }, [answering, seconds]);
 
   useEffect(() => {
     if (playing && seconds <= 0 && !busy && !failed) {
@@ -147,41 +168,47 @@ export function VerifiedGame({ mode, onExit }: { mode: Mode; onExit: () => void 
       <div className="status" ref={status}><span>{game.mode.toUpperCase()} · ROUND <b>{game.round}</b> / {ROUND_COUNT}</span><span>★ SCORE <b>{game.score.toLocaleString()}</b></span></div>
       <div className="scene">
         <div className="sun"/><div className="mountain mountain-a"/><div className="mountain mountain-b"/><div className="grass ground"/><div className="arena"/>
-        {game.spriteId && <div className="sprite-wrap"><PixelSprite key={game.round} id={game.spriteId} reveal={1 - seconds / ROUND_SECONDS} clear={Boolean(game.outcome)}/></div>}
-        <div className="scene-caption">{game.answer ? `IT'S ${game.answer.toUpperCase()}!` : playing ? 'WHO COULD IT BE?' : 'READY WHEN YOU ARE'}</div>
+        {game.spriteId && <div className={`sprite-wrap ${intro ? 'sprite-emerging' : ''}`}><PixelSprite key={game.round} id={game.spriteId} reveal={1 - seconds / ROUND_SECONDS} clear={Boolean(game.outcome)}/></div>}
+        {intro && <SpawnEffect ready onComplete={noop}/>}
+        <div className="scene-caption">{game.answer ? `IT'S ${game.answer.toUpperCase()}!` : intro ? 'A WILD MYSTERY APPEARS!' : playing ? 'WHO COULD IT BE?' : 'READY WHEN YOU ARE'}</div>
       </div>
     </>}
     <div className="panel">
       {!game && !failed && <p role="status">CONNECTING TO VERIFIED PLAY…</p>}
       {game && !game.outcome && <>
-        <TimerBar seconds={seconds} duration={ROUND_SECONDS} waiting={!playing}/>
+        <TimerBar seconds={seconds} duration={ROUND_SECONDS} waiting={!answering}/>
         {!playing && <button className="primary typing-start" disabled={disabled} onClick={() => {
           input.current?.focus();
           act('open');
         }}>{game.mode === 'hard' ? 'TAP TO TYPE & START TIMER' : 'START ROUND ▶'}</button>}
-        {game.mode === 'regular' && playing && <div className="choice-grid" role="group" aria-label="Choose the Pokémon">
+        {game.mode === 'regular' && intro && <div className="spawn-panel"><span role="status">GET READY, TRAINER!</span></div>}
+        {game.mode === 'regular' && answering && <div className="choice-grid" role="group" aria-label="Choose the Pokémon">
           {game.choices?.map((id, i) => <button key={id} type="button" disabled={disabled} className={`choice choice-${i}`} onClick={() => act('guess', String(id))}>
             <span className="choice-symbol" aria-hidden="true">{['◆','▲','●','■'][i]}</span><span>{POKEMON.find(p => p.id === id)?.name}</span>
           </button>)}
         </div>}
         {game.mode === 'hard' && <form className="guess-form verified-guess" onSubmit={event => {
           event.preventDefault();
-          if (playing && !disabled && typed) act('guess', guess);
+          if (answering && !disabled && typed) act('guess', guess);
         }}>
           <label htmlFor="verified-guess">YOUR GUESS</label>
           <div className="input-row">
             <input id="verified-guess" ref={input} value={guess} onChange={event => setGuess(event.target.value)} maxLength={100}
               autoComplete="off" autoCapitalize="none" autoCorrect="off" enterKeyHint="go" spellCheck={false} placeholder="Type Pokémon name…"/>
-            <button className="primary" disabled={!playing || disabled || !typed} onPointerDown={e => e.preventDefault()}>GUESS ▶</button>
+            <button className="primary" disabled={!answering || disabled || !typed} onPointerDown={e => e.preventDefault()}>GUESS ▶</button>
           </div>
-          {playing && suggestions.length > 0 && <div className="suggestions">{suggestions.map(p => <button key={p.id} type="button" disabled={disabled} onPointerDown={e => e.preventDefault()} onClick={() => act('guess', p.name)}>{p.name}</button>)}</div>}
+          {answering && suggestions.length > 0 && <div className="suggestions">{suggestions.map(p => <button key={p.id} type="button" disabled={disabled} onPointerDown={e => e.preventDefault()} onClick={() => act('guess', p.name)}>{p.name}</button>)}</div>}
         </form>}
-        {playing && <div className="footnote"><span role="status">{notice}</span><button className="skip" disabled={disabled} onClick={() => act('skip')}>SKIP →</button></div>}
+        {answering && <div className="footnote"><span role="status">{notice}</span><button className="skip" disabled={disabled} onClick={() => act('skip')}>SKIP →</button></div>}
       </>}
       {game?.outcome && <div className="reveal-panel">
         <div className="micro">{labels[game.outcome]}</div>
         <h2>{game.answer}</h2><p>+{game.roundPoints?.toLocaleString()} POINTS</p>
-        <button className="primary" disabled={busy || Boolean(failed)} onClick={() => game.completed ? setShowResults(true) : act('next')}>
+        <button className="primary" disabled={busy || Boolean(failed)} onClick={() => {
+          if (!game.completed) { act('next'); return; }
+          playSound('complete');
+          setShowResults(true);
+        }}>
           {game.completed ? 'VIEW RESULTS ▶' : 'NEXT ROUND ▶'}
         </button>
       </div>}

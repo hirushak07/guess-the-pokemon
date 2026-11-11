@@ -125,3 +125,13 @@ button:focus-visible{outline:3px solid #e9a83d;outline-offset:4px}
 }
 
 .verified-guess{margin-top:12px}
+
+.pokepixel-auth-card {
+  border: 2px solid #a7c3ff;
+}
+.pokepixel-auth-title {
+  color: #ffd36b;
+}
+.home-panel .guest-note {
+  margin: 0.75rem 0 0;
+}

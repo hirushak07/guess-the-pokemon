@@ -1,9 +1,14 @@
-
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ClerkProvider } from '@clerk/react';
 import App from './App';
+// Self-hosted fonts load from the site itself instead of a render-blocking Google Fonts stylesheet.
+import '@fontsource/press-start-2p/latin-400.css';
+import '@fontsource/vt323/latin-400.css';
 import './style.css';
+
+// A tab left open across a deploy can ask for code-split files that no longer exist; reload for the new build.
+window.addEventListener('vite:preloadError', () => window.location.reload());
 
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 

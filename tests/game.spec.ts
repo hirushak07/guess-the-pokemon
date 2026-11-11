@@ -94,9 +94,11 @@ test('mobile layout fits and unavailable GIFs reach the static fallback', async 
 
 test('original audio starts after interaction, mute stops it, and correct guesses score once', async ({ page }) => {
   await page.getByRole('button', { name: 'Music', exact: true }).click();
-  let id = 0;
+  // Sprite ids in the order rounds request them; the next round's sprite is fetched early.
+  const ids: number[] = [];
   await page.route('**/*.gif', route => {
-    id = Number(route.request().url().match(/(\d+)\.gif/)![1]);
+    const requested = Number(route.request().url().match(/(\d+)\.gif/)![1]);
+    if (!ids.includes(requested)) ids.push(requested);
     return route.fulfill({ contentType: 'image/gif', body: gif });
   });
   await page.evaluate(() => {
@@ -128,7 +130,7 @@ test('original audio starts after interaction, mute stops it, and correct guesse
   await expect(page.locator('.choice')).toHaveCount(4);
   expect(await page.evaluate(() => (window as any).sounds.started)).toBe(starts);
   await page.getByRole('button', { name: 'Sound effects' }).click();
-  await page.locator('.choice').filter({ hasText: POKEMON.find(p => p.id === id)!.name }).click();
+  await page.locator('.choice').filter({ hasText: POKEMON.find(p => p.id === ids[0])!.name }).click();
   await expect(page.locator('.reveal-panel')).toContainText(/\+[\d,]+ POINTS/);
   const awarded = (await page.locator('.reveal-panel p').innerText()).match(/[\d,]+/)![0];
   expect(Number(awarded.replaceAll(',', ''))).toBeGreaterThan(0);
@@ -138,9 +140,11 @@ test('original audio starts after interaction, mute stops it, and correct guesse
 
 test('live points drain, submissions use exact elapsed time, and each round resets', async ({ page }) => {
   await page.clock.install();
-  let id = 0;
+  // Sprite ids in the order rounds request them; the next round's sprite is fetched early.
+  const ids: number[] = [];
   await page.route('**/*.gif', route => {
-    id = Number(route.request().url().match(/(\d+)\.gif/)![1]);
+    const requested = Number(route.request().url().match(/(\d+)\.gif/)![1]);
+    if (!ids.includes(requested)) ids.push(requested);
     return route.fulfill({ contentType: 'image/gif', body: gif });
   });
   await page.getByRole('button', { name: /START REGULAR/ }).click();
@@ -148,7 +152,7 @@ test('live points drain, submissions use exact elapsed time, and each round rese
   const points = page.locator('.timer-points b');
   const skipIntro = page.getByRole('button', { name: 'SKIP INTRO' });
   const next = page.getByRole('button', { name: /NEXT ROUND/ });
-  const answer = () => page.getByRole('button', { name: POKEMON.find(p => p.id === id)!.name });
+  const answer = (round: number) => page.getByRole('button', { name: POKEMON.find(p => p.id === ids[round])!.name });
   await expect(skipIntro).toBeEnabled();
   await page.clock.pauseAt(new Date((await page.evaluate(() => Date.now())) + 200));
   await expect(bar).toHaveAttribute('aria-valuenow', '10');
@@ -157,7 +161,7 @@ test('live points drain, submissions use exact elapsed time, and each round rese
   await skipIntro.dispatchEvent('click');
   await page.clock.runFor(1250);
   await expect(points).toHaveText('875');
-  await answer().dispatchEvent('click');
+  await answer(0).dispatchEvent('click');
   await expect(page.locator('.reveal-panel')).toContainText('+875 POINTS');
 
   await next.dispatchEvent('click');
@@ -166,7 +170,7 @@ test('live points drain, submissions use exact elapsed time, and each round rese
   await skipIntro.dispatchEvent('click');
   await page.clock.runFor(6750);
   await expect(points).toHaveText('325');
-  await answer().dispatchEvent('click');
+  await answer(1).dispatchEvent('click');
   await expect(page.locator('.reveal-panel')).toContainText('+325 POINTS');
   await expect(page.locator('.status')).toContainText('SCORE 1,200');
 
@@ -174,7 +178,7 @@ test('live points drain, submissions use exact elapsed time, and each round rese
   await expect(skipIntro).toBeEnabled();
   await skipIntro.dispatchEvent('click');
   // Move the submission clock beyond the deadline without running the interval.
-  await answer().evaluate(button => {
+  await answer(2).evaluate(button => {
     const now = performance.now.bind(performance);
     performance.now = () => now() + 10_001;
     (button as HTMLButtonElement).click();
@@ -202,9 +206,11 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }
     });
 
     test('Hard waits for a typing tap, then supports keyboard submission and retry', async ({ page }) => {
-      let id = 0;
+      // Sprite ids in the order rounds request them; the next round's sprite is fetched early.
+      const ids: number[] = [];
       await page.route('**/*.gif', route => {
-        id = Number(route.request().url().match(/(\d+)\.gif/)![1]);
+        const requested = Number(route.request().url().match(/(\d+)\.gif/)![1]);
+        if (!ids.includes(requested)) ids.push(requested);
         return route.fulfill({ contentType: 'image/gif', body: gif });
       });
       await page.getByRole('button', { name: /HARD TYPE/ }).tap();
@@ -226,7 +232,7 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }
       await expect(page.getByText('Not quite! Try again.')).toBeVisible();
       await expect(input).toBeFocused();
       await expect(input).toHaveValue('');
-      await input.fill(POKEMON.find(p => p.id === id)!.name);
+      await input.fill(POKEMON.find(p => p.id === ids[0])!.name);
       await input.press('Enter');
       await expect(page.locator('.reveal-panel')).toContainText('CORRECT ANSWER');
       await expect(input).toHaveCount(0);
@@ -287,9 +293,11 @@ test('music plays on home, through results and hidden tabs, and remembers mute',
 });
 
 test('Gen 3 throw leads the ball, release follows, and success uses the selected recording', async ({ page }) => {
-  let id = 0;
+  // Sprite ids in the order rounds request them; the next round's sprite is fetched early.
+  const ids: number[] = [];
   await page.route('**/*.gif', route => {
-    id = Number(route.request().url().match(/(\d+)\.gif/)![1]);
+    const requested = Number(route.request().url().match(/(\d+)\.gif/)![1]);
+    if (!ids.includes(requested)) ids.push(requested);
     return route.fulfill({ contentType: 'image/gif', body: gif });
   });
   await page.evaluate(() => {
@@ -325,7 +333,7 @@ test('Gen 3 throw leads the ball, release follows, and success uses the selected
   expect(events[1].duration).toBeCloseTo(.604, 1);
   expect(events[1].at - events[0].at).toBeGreaterThan(650);
   expect(await page.evaluate(() => (window as any).recordings.stops)).toBe(0);
-  await page.locator('.choice').filter({ hasText: POKEMON.find(p => p.id === id)!.name }).click();
+  await page.locator('.choice').filter({ hasText: POKEMON.find(p => p.id === ids[0])!.name }).click();
   const success = await page.evaluate(() => (window as any).recordings.events[2]);
   expect(success.duration).toBeGreaterThan(.9);
   expect(success.duration).toBeLessThan(1.1);
@@ -362,4 +370,20 @@ test('PNG fallback stays on the pixelation canvas and unavailable audio is harml
   await expect(page.locator('.sprite-error')).toHaveCount(0);
   await page.locator('.choice').first().click();
   await expect(page.locator('.reveal-panel')).toBeVisible();
+});
+
+test('the next round downloads its sprite during the current round and reuses it', async ({ page }) => {
+  const requested: string[] = [];
+  await page.route('**/*.gif', route => {
+    requested.push(route.request().url());
+    return route.fulfill({ contentType: 'image/gif', body: gif });
+  });
+  await page.getByRole('button', { name: /START REGULAR/ }).click();
+  await page.getByRole('button', { name: 'SKIP INTRO' }).click();
+  await expect(page.locator('.choice')).toHaveCount(4);
+  await expect.poll(() => new Set(requested).size).toBe(2);
+  await page.locator('.choice').first().click();
+  await page.getByRole('button', { name: /NEXT ROUND/ }).click();
+  await expect(page.getByRole('button', { name: 'SKIP INTRO' })).toBeEnabled();
+  expect(new Set(requested).size).toBe(2);
 });

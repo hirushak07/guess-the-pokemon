@@ -1,12 +1,10 @@
-import { VerifiedGame } from './VerifiedGame';
-import { PlayerProfile } from './PlayerProfile';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { TimerBar } from './TimerBar';
 import { GAME_MAX_POINTS, pointsForTime, ROUND_COUNT, ROUND_MAX_POINTS, ROUND_SECONDS } from './scoring';
 import { SpawnEffect } from './SpawnEffect';
 import { playSound, setSoundEnabled, stopSounds, unlockSound, setMusicEnabled, setMusicActive, stopAllAudio, handleAudioVisibility } from './sound';
-import { PixelSprite } from './PixelSprite';
+import { PixelSprite, prefetchSprite } from './PixelSprite';
 import { POKEMON, pickRounds, pickOptions, normalizeGuess, type Pokemon } from './pokemon';
 
 import {
@@ -16,6 +14,11 @@ import {
   UserButton,
   useUser,
 } from '@clerk/react';
+
+// Signed-in play and profile sync (and the database client they share) load only for players who
+// sign in, so guests never download them.
+const VerifiedGame = lazy(() => import('./VerifiedGame').then(m => ({ default: m.VerifiedGame })));
+const PlayerProfile = lazy(() => import('./PlayerProfile').then(m => ({ default: m.PlayerProfile })));
 
 type Mode = 'regular' | 'hard';
 type Stage = 'home' | 'spawning' | 'ready' | 'playing' | 'reveal' | 'finished';
@@ -182,6 +185,12 @@ function App() {
     return () => clearInterval(interval);
   }, [stage]);
 
+  // Download the next round's sprite while this one plays, so the next intro starts straight away.
+  useEffect(() => {
+    const upcoming = rounds[index + 1];
+    if (stage === 'playing' && upcoming) prefetchSprite(upcoming.id);
+  }, [stage, index, rounds]);
+
   useEffect(() => {
     if (stage !== 'playing' || !touchInput.current) return;
     const viewport = window.visualViewport;
@@ -237,7 +246,7 @@ function App() {
 
     </header>
 
-    <PlayerProfile />
+    <Show when="signed-in"><Suspense><PlayerProfile/></Suspense></Show>
 
     <main className="layout">
       <section className="heading">
@@ -247,7 +256,7 @@ function App() {
       </section>
       <section className="game-shell">
         <div className="shell-head"><div>◈ POKÉPIXEL <span> / ARCADE</span></div><div className="audio-controls"><button className="sound-toggle" aria-pressed={sound} aria-label="Sound effects" onClick={() => { const value = !sound; setSoundEnabled(value); if (value) unlockSound(); setSound(value); }}>SOUND {sound ? 'ON ♪' : 'OFF'}</button><button className="sound-toggle" aria-pressed={music} aria-label="Music" onClick={() => { const value = !music; setMusicEnabled(value); if (value) unlockSound(); setMusic(value); }}>MUSIC {music ? 'ON ♫' : 'OFF'}</button></div></div>
-        {verified && <VerifiedGame key={verifiedPlayer} mode={mode} onExit={() => setVerifiedPlayer(null)}/>}
+        {verified && <Suspense fallback={<div className="panel"><p role="status">CONNECTING TO VERIFIED PLAY…</p></div>}><VerifiedGame key={verifiedPlayer} mode={mode} onExit={() => setVerifiedPlayer(null)}/></Suspense>}
         {!verified && stage === 'home' && <div className="home-screen">
           <div className="scene home-scene"><div className="sun"/><div className="mountain mountain-a"/><div className="mountain mountain-b"/><div className="grass ground"/><div className="arena"/><div className="question">?</div><div className="scene-caption">A NEW CHALLENGE AWAITS...</div></div>
           <div className="panel home-panel"><div className="micro">READY, TRAINER?</div><h2>TEST YOUR POKÉMON KNOWLEDGE!</h2><p>GUESS {ROUND_COUNT} RANDOM POKÉMON AS THEIR SPRITES COME INTO FOCUS. CORRECT GUESSES EARN UP TO {ROUND_MAX_POINTS.toLocaleString()} POINTS. GUESS FASTER TO SCORE MORE!</p><div className="features"><span>◷ {ROUND_SECONDS} SEC / ROUND</span><span>★ {GAME_MAX_POINTS.toLocaleString()} MAX POINTS</span><span>◈ GEN 5 ANIMATIONS</span></div><div className="mode-picker" role="group" aria-label="Choose a game mode"><button className={mode === 'regular' ? 'mode-option selected' : 'mode-option'} onClick={() => { unlockSound(); playSound('select'); setMode('regular'); }} aria-pressed={mode === 'regular'}><strong>⚡ REGULAR</strong><span>4 CHOICES · KAHOOT STYLE</span></button><button className={mode === 'hard' ? 'mode-option selected' : 'mode-option'} onClick={() => { unlockSound(); playSound('select'); setMode('hard'); }} aria-pressed={mode === 'hard'}><strong>★ HARD</strong><span>TYPE THE NAME YOURSELF</span></button></div><button className="primary" onClick={start}>▶ START {mode.toUpperCase()} CHALLENGE</button><Show when="signed-out"><p className="guest-note">Play as a guest or sign in to save your scores.</p></Show></div>

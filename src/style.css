@@ -135,3 +135,4 @@ button:focus-visible{outline:3px solid #e9a83d;outline-offset:4px}
 .home-panel .guest-note {
   margin: 0.75rem 0 0;
 }
+.profile-status{position:relative;z-index:1;max-width:890px;margin:0 auto;padding:0 18px;text-align:center;color:#f4c566;font-size:18px;letter-spacing:1px}

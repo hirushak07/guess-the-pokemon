@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 type Action = { p_action: string; p_mode?: string; p_round?: number; p_guess?: string };
 
-async function mockVerifiedGame(page: Page) {
+async function mockVerifiedGame(page: Page, profileStatus = 'saved') {
   await page.addInitScript(() => {
     if (!sessionStorage.getItem('test-initialized')) {
       sessionStorage.setItem('test-initialized', 'yes');
@@ -11,7 +11,12 @@ async function mockVerifiedGame(page: Page) {
   });
   await page.route('https://fonts.googleapis.com/**', route => route.abort());
   await page.route('https://raw.githubusercontent.com/**', route => route.abort());
-  await page.route('https://example.supabase.co/rest/v1/profiles**', route => route.fulfill({ status: 201 }));
+  const profileSyncs: { p_username: string | null }[] = [];
+  await page.route('https://example.supabase.co/rest/v1/rpc/sync_profile', route => {
+    expect(route.request().headers().authorization).toBe('Bearer test-session-token');
+    profileSyncs.push(route.request().postDataJSON());
+    return route.fulfill({ json: { status: profileStatus, username: profileStatus === 'saved' ? 'trainer' : null } });
+  });
 
   const requests: Action[] = [];
   let mode: string | undefined;
@@ -55,7 +60,7 @@ async function mockVerifiedGame(page: Page) {
     } });
   });
   await page.goto('/');
-  return { requests, failNextGuess: () => { failOnce = true; } };
+  return { requests, profileSyncs, failNextGuess: () => { failOnce = true; } };
 }
 
 test('Regular uses server points, retries a lost response and displays five saved rounds', async ({ page }) => {
@@ -105,4 +110,18 @@ test('Hard keeps focus on a wrong guess, resumes after reload and exits on sign-
   await page.getByRole('button', { name: /START REGULAR/ }).click();
   await expect(page.locator('.choice')).toHaveCount(4);
   expect(requests).toHaveLength(previous);
+});
+
+test('profile sync sends the Clerk username with the session token and stays quiet on success', async ({ page }) => {
+  const { profileSyncs } = await mockVerifiedGame(page);
+  await expect.poll(() => profileSyncs.length).toBeGreaterThan(0);
+  expect(profileSyncs.every(body => body.p_username === 'trainer')).toBe(true);
+  await expect(page.locator('.profile-status')).toHaveCount(0);
+});
+
+test('an unavailable username shows a quiet notice and verified play still works', async ({ page }) => {
+  await mockVerifiedGame(page, 'username_taken');
+  await expect(page.locator('.profile-status')).toContainText('USERNAME ISN’T ON YOUR PROFILE');
+  await page.getByRole('button', { name: /START REGULAR/ }).click();
+  await expect(page.getByRole('button', { name: /START ROUND/ })).toBeVisible();
 });

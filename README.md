@@ -59,6 +59,9 @@ npm run preview
 - `src/sound.ts` — release recording playback, synthesized cues, music scheduler, and independent audio controls
 - `src/TimerBar.tsx` — HP countdown and available points
 - `src/scoring.ts` — scoring formula and round limits
+- `src/VerifiedGame.tsx` — signed-in play driven by the `play_verified_game` RPC (loaded only after sign-in)
+- `src/PlayerProfile.tsx` — keeps the Supabase profile in step with Clerk through `sync_profile`
+- `src/useSupabase.ts` — Supabase database client that sends the Clerk session token
 
 ## Browser checks
 
@@ -89,8 +92,17 @@ Call the RPC with the signed-in player's Supabase client. `start` takes `p_mode`
 
 Signed-in games use this RPC after the migration is deployed. Guests continue to play locally. Verified rounds start on an explicit tap and load the sprite during the timed round. Sprite IDs are visible during play and can be mapped to Pokémon names, so these results are suitable for verifying scoring rules and need additional abuse controls before competitive ranking.
 
-Run the database integration test against a local Supabase database after applying the migration:
+Run the database integration tests against a local Supabase database after applying the migrations:
 
 ```sh
 psql "$LOCAL_SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/verified_game_results.sql
+psql "$LOCAL_SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/profile_sync.sql
 ```
+
+## Player profiles
+
+Signing in calls the `sync_profile` RPC, which always creates the player's `profiles` row and decides on the server whether their username can be stored. Players can read their own profile but can no longer write the table directly, so nobody can claim another player's name. Usernames follow the existing rule (3–20 letters, digits or underscores, unique ignoring case); a name that breaks the rule or is already held is left off the profile, and the game shows a small notice while verified scores keep saving.
+
+For Clerk to vouch for usernames, add `"username": "{{user.username}}"` to the production instance's session token (Clerk Dashboard → Sessions → Customize session token). With that claim, the verified name always wins and is released from any older row that still holds it, such as a renamed account or an account from the Clerk development instance. Without it, the name sent by the browser is only used when it is free.
+
+The site uses Supabase's database client (`@supabase/postgrest-js`) rather than the full `supabase-js` SDK, because the game only calls RPCs and Clerk handles sign-in. Fonts are bundled from Fontsource instead of loading from Google Fonts.

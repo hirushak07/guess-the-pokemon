@@ -32,7 +32,8 @@ async function mockVerifiedGame(page: Page, profileStatus = 'saved') {
     const request = route.request().postDataJSON() as Action;
     requests.push(request);
     if (request.p_action === 'start') mode ??= request.p_mode;
-    if (request.p_action === 'open') deadline ??= new Date(Date.now() + 10_000).toISOString();
+    // Like the server: a 1.6 s Poké Ball intro, then the 10 s answer window.
+    if (request.p_action === 'open') deadline ??= new Date(Date.now() + 11_600).toISOString();
     if (request.p_action === 'next' && request.p_round === round) {
       round++;
       deadline = outcome = points = null;
@@ -124,4 +125,38 @@ test('an unavailable username shows a quiet notice and verified play still works
   await expect(page.locator('.profile-status')).toContainText('USERNAME ISN’T ON YOUR PROFILE');
   await page.getByRole('button', { name: /START REGULAR/ }).click();
   await expect(page.getByRole('button', { name: /START ROUND/ })).toBeVisible();
+});
+
+test('signed-in rounds play the Poké Ball intro and its recordings before the answer window opens', async ({ page }) => {
+  await mockVerifiedGame(page);
+  await page.evaluate(() => {
+    (window as any).audio = { decoded: 0, recordings: [] as number[] };
+    const decode = AudioContext.prototype.decodeAudioData;
+    AudioContext.prototype.decodeAudioData = function (...args: any[]) {
+      const result = (decode as any).apply(this, args);
+      result.then(() => { (window as any).audio.decoded++; });
+      return result;
+    };
+    const create = AudioContext.prototype.createBufferSource;
+    AudioContext.prototype.createBufferSource = function () {
+      const source = create.call(this);
+      const start = source.start.bind(source);
+      source.start = (...args) => { (window as any).audio.recordings.push(source.buffer?.duration); start(...args); };
+      return source;
+    };
+  });
+  await page.getByRole('heading', { level: 1 }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).audio.decoded)).toBe(3);
+  await page.getByRole('button', { name: /START REGULAR/ }).click();
+  await page.getByRole('button', { name: /START ROUND/ }).click();
+  await expect(page.locator('.spawn-running')).toBeVisible();
+  await expect(page.locator('.scene-caption')).toHaveText('A WILD MYSTERY APPEARS!');
+  await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');
+  await expect(page.locator('.choice')).toHaveCount(0);
+  await expect(page.locator('.choice')).toHaveCount(4);
+  await expect(page.locator('.spawn-effect')).toHaveCount(0);
+  const played = await page.evaluate(() => (window as any).audio.recordings as number[]);
+  expect(played).toHaveLength(2);
+  expect(played[0]).toBeCloseTo(.617, 1);
+  expect(played[1]).toBeCloseTo(.602, 1);
 });

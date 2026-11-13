@@ -136,3 +136,71 @@ button:focus-visible{outline:3px solid #e9a83d;outline-offset:4px}
   margin: 0.75rem 0 0;
 }
 .profile-status{position:relative;z-index:1;max-width:890px;margin:0 auto;padding:0 18px;text-align:center;color:#f4c566;font-size:18px;letter-spacing:1px}
+
+.leaderboard-area {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.leaderboard {
+  margin-top: 0.75rem;
+  padding: clamp(0.75rem, 4vw, 1.5rem);
+  border: 1px solid #637795;
+  background: #15243b;
+  color: #f6eed6;
+  font-size: 1.25rem;
+  text-align: left;
+}
+
+.leaderboard h2 {
+  margin-top: 0;
+  color: #ffdb69;
+}
+
+.leaderboard button {
+  min-height: 44px;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid #8398b9;
+  background: #243b5f;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.leaderboard button[aria-pressed="true"] {
+  background: #ffdb69;
+  color: #15243b;
+}
+
+.leaderboard-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.leaderboard table {
+  width: 100%;
+  margin-top: 1rem;
+  border-collapse: collapse;
+}
+
+.leaderboard-caption {
+  text-align: left;
+  color: #ffdb69;
+}
+
+.leaderboard :is(th, td) {
+  padding: 0.3rem;
+  border-bottom: 1px solid #637795;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.leaderboard :is(th, td):last-child {
+  text-align: right;
+}
+
+.leaderboard-visibility {
+  margin-top: 1rem;
+  border-top: 1px solid #637795;
+}

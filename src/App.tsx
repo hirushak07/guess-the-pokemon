@@ -15,10 +15,11 @@ import {
   useUser,
 } from '@clerk/react';
 
-// Signed-in play and profile sync (and the database client they share) load only for players who
-// sign in, so guests never download them.
+// Load signed-in gameplay and profile sync only when needed. The public leaderboard also loads on demand.
 const VerifiedGame = lazy(() => import('./VerifiedGame').then(m => ({ default: m.VerifiedGame })));
 const PlayerProfile = lazy(() => import('./PlayerProfile').then(m => ({ default: m.PlayerProfile })));
+
+const Leaderboard = lazy(() => import('./Leaderboard').then(m => ({ default: m.Leaderboard })));
 
 type Mode = 'regular' | 'hard';
 type Stage = 'home' | 'spawning' | 'ready' | 'playing' | 'reveal' | 'finished';
@@ -31,6 +32,7 @@ const resultLabels: Record<RoundResult, string> = {
 
 function App() {
   const { user, isSignedIn } = useUser();
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [verifiedPlayer, setVerifiedPlayer] = useState<string | null>(null);
   const verified = Boolean(isSignedIn && user && verifiedPlayer === user.id);
   useEffect(() => {
@@ -281,6 +283,15 @@ function App() {
         <div className="shell-foot">© FAN-MADE GAME <span>POWERED BY POKÉAPI SPRITES</span></div>
       </section>
       <div className="below">NO ACCOUNT NEEDED · 5 RANDOM ROUNDS · PLAY AGAIN INSTANTLY</div>
+      {!verified && (stage === 'home' || stage === 'finished') && <div className="leaderboard-area">
+        <button type="button" className="return-button" aria-expanded={showLeaderboard}
+          onClick={() => setShowLeaderboard(previous => !previous)}>
+          {showLeaderboard ? 'HIDE LEADERBOARD' : 'VIEW LEADERBOARD'}
+        </button>
+        {showLeaderboard && <Suspense fallback={<p role="status">Loading leaderboard…</p>}>
+          <Leaderboard key={isSignedIn ? user?.id : 'guest'} signedIn={Boolean(isSignedIn)} />
+        </Suspense>}
+      </div>}
     </main>
   </div>;
 }

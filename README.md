@@ -106,3 +106,9 @@ Signing in calls the `sync_profile` RPC, which always creates the player's `prof
 For Clerk to vouch for usernames, add `"username": "{{user.username}}"` to the production instance's session token (Clerk Dashboard → Sessions → Customize session token). With that claim, the verified name always wins and is released from any older row that still holds it, such as a renamed account or an account from the Clerk development instance. Without it, the name sent by the browser is only used when it is free.
 
 The site uses Supabase's database client (`@supabase/postgrest-js`) rather than the full `supabase-js` SDK, because the game only calls RPCs and Clerk handles sign-in. Fonts are bundled from Fontsource instead of loading from Google Fonts.
+
+## Verified leaderboards
+
+Apply the leaderboard migration after the profile-sync and verified-round migrations, before releasing the leaderboard UI. Run `supabase/tests/verified_leaderboards.sql` against a disposable or staging database.
+
+The homepage leaderboard shows up to 20 trainers per mode, using each opted-in player's highest positive verified score from scoring version 1. Tied scores share a rank. Players can hide their scores again without losing their saved results. Guests can read the rankings. The public RPC returns only rank, username, and score. Sprite IDs are still visible to the client during verified play, so the board is intended for casual competition.
